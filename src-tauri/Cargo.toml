@@ -1,6 +1,6 @@
 [package]
 name = "pulse-tracker"
-version = "0.2.0"
+version = "0.3.0"
 description = "Pulse - a lightweight local-first issue tracker"
 edition = "2021"
 

@@ -615,8 +615,9 @@ pub async fn github_push_issue(
         return Err("推送需要 GitHub Token，请先在设置中填写".to_string());
     }
 
+    let repo_ref = repo.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
-        github::create_issue(&repo, &title, &body, token.as_deref())
+        github::create_issue(&repo_ref, &title, &body, token.as_deref())
     })
     .await
     .map_err(|e| e.to_string())??;

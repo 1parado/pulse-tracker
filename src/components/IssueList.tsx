@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Github, Inbox, Plus } from "lucide-react";
+import { ChevronDown, Github, Inbox, Plus, Search, X } from "lucide-react";
 import type { Issue, Status } from "../lib/types";
 import { STATUS_META, STATUS_ORDER } from "../lib/types";
 import { PriorityIcon, StatusIcon, fmtDate } from "./common";
@@ -7,6 +7,36 @@ import { PriorityIcon, StatusIcon, fmtDate } from "./common";
 function nextStatus(s: Status): Status {
   const i = STATUS_ORDER.indexOf(s);
   return STATUS_ORDER[(i + 1) % STATUS_ORDER.length];
+}
+
+/** 命中片段高亮 */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const ql = q.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let idx = 0;
+  let pos = lower.indexOf(ql);
+  let key = 0;
+  while (pos !== -1) {
+    if (pos > idx) parts.push(text.slice(idx, pos));
+    parts.push(<mark key={key++}>{text.slice(pos, pos + q.length)}</mark>);
+    idx = pos + q.length;
+    pos = lower.indexOf(ql, idx);
+  }
+  parts.push(text.slice(idx));
+  return <>{parts}</>;
+}
+
+function matchesText(i: Issue, q: string) {
+  const ql = q.trim().toLowerCase();
+  if (!ql) return true;
+  return (
+    i.title.toLowerCase().includes(ql) ||
+    i.description.toLowerCase().includes(ql) ||
+    i.displayKey.toLowerCase().includes(ql)
+  );
 }
 
 export function IssueList({
@@ -18,6 +48,10 @@ export function IssueList({
   onNewIssue,
   progress,
   onStatusChange,
+  query,
+  onQueryChange,
+  statusFilter,
+  onToggleStatus,
 }: {
   title: string;
   subtitle?: string;
@@ -27,10 +61,15 @@ export function IssueList({
   onNewIssue: () => void;
   progress?: number | null;
   onStatusChange: (id: string, status: Status) => void;
+  query: string;
+  onQueryChange: (q: string) => void;
+  statusFilter: Status[];
+  onToggleStatus: (s: Status) => void;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStatus, setOverStatus] = useState<Status | null>(null);
+  const searching = query.trim() !== "";
 
   const dragging = dragId != null;
   const allGroups = STATUS_ORDER.map((s) => ({
@@ -59,6 +98,42 @@ export function IssueList({
           </button>
         </div>
       </header>
+
+      <div className="filter-row">
+        <div className="search-box">
+          <Search size={13} />
+          <input
+            placeholder="搜索标题、描述、编号、评论…"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                onQueryChange("");
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+          />
+          {query && (
+            <button className="search-clear" title="清空搜索" onClick={() => onQueryChange("")}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="status-chips">
+          {STATUS_ORDER.map((s) => (
+            <button
+              key={s}
+              className={"chip" + (statusFilter.includes(s) ? " on" : "")}
+              style={statusFilter.includes(s) ? { borderColor: STATUS_META[s].color } : undefined}
+              onClick={() => onToggleStatus(s)}
+              title={statusFilter.includes(s) ? "取消筛选" : `只看「${STATUS_META[s].label}」`}
+            >
+              <span className="chip-dot" style={{ background: STATUS_META[s].color }} />
+              {STATUS_META[s].label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="issue-scroll">
         {groups.length === 0 && (
@@ -127,7 +202,9 @@ export function IssueList({
                   }
                   onClick={() => onSelect(i.id)}
                 >
-                  <span className="issue-key">{i.displayKey}</span>
+                  <span className="issue-key">
+                    <Highlight text={i.displayKey} query={query} />
+                  </span>
                   <button
                     className="status-cycle"
                     title={`改为「${STATUS_META[nextStatus(i.status)].label}」`}
@@ -139,7 +216,12 @@ export function IssueList({
                     <StatusIcon status={i.status} size={14} />
                   </button>
                   <PriorityIcon priority={i.priority} size={13} />
-                  <span className="issue-title">{i.title}</span>
+                  <span className="issue-title">
+                    <Highlight text={i.title} query={query} />
+                  </span>
+                  {searching && !matchesText(i, query) && (
+                    <span className="comment-hit" title="命中评论内容">评论</span>
+                  )}
                   {i.ghRepo && <Github size={12} className="row-gh" />}
                   <span className="issue-date">{fmtDate(i.updatedAt)}</span>
                 </div>

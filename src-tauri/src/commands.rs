@@ -111,6 +111,16 @@ pub fn get_issue(state: State<'_, AppState>, id: String) -> Result<Issue, String
     db::get_issue(&conn, &id)
 }
 
+#[tauri::command]
+pub fn search_issues(state: State<'_, AppState>, query: String) -> Result<Vec<Issue>, String> {
+    let q = query.trim().to_string();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    db::search_issues(&conn, &q)
+}
+
 // ---------- projects ----------
 
 #[tauri::command]

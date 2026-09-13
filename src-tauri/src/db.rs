@@ -181,6 +181,26 @@ pub fn get_issue(conn: &Connection, id: &str) -> Result<Issue, String> {
         .ok_or_else(|| "issue not found".to_string())
 }
 
+/// 全局搜索：标题 / 描述 / 编号 / 评论正文，返回去重后的问题列表
+pub fn search_issues(conn: &Connection, q: &str) -> Result<Vec<Issue>, String> {
+    let pattern = format!(
+        "%{}%",
+        q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+    );
+    let sql = "SELECT DISTINCT i.* FROM issues i
+               LEFT JOIN comments c ON c.issue_id = i.id
+               WHERE i.title LIKE ?1 ESCAPE '\\'
+                  OR i.description LIKE ?1 ESCAPE '\\'
+                  OR i.display_key LIKE ?1 ESCAPE '\\'
+                  OR c.body LIKE ?1 ESCAPE '\\'
+               ORDER BY i.seq DESC";
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([&pattern], issue_from_row)
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 pub fn insert_issue(conn: &Connection, i: &Issue) -> Result<(), String> {
     conn.execute(
         "INSERT INTO issues (id, seq, display_key, project_id, cycle_id, title, description, status, priority)

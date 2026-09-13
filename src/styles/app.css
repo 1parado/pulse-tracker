@@ -209,6 +209,106 @@ button {
   margin-top: 8px;
 }
 
+/* ---------- 搜索与筛选 ---------- */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 10px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-3);
+  transition: border-color 0.1s;
+}
+.search-box:focus-within {
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  color: var(--text);
+  font-size: 12.5px;
+}
+.search-box input::placeholder {
+  color: var(--text-3);
+}
+.search-clear {
+  display: inline-flex;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+.search-clear:hover {
+  color: var(--text);
+}
+
+.status-chips {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+  white-space: nowrap;
+}
+.chip:hover {
+  color: var(--text);
+}
+.chip.on {
+  color: var(--text);
+  background: var(--active);
+}
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.issue-row mark {
+  background: rgba(245, 184, 61, 0.28);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.comment-hit {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
 /* ---------- 通用控件 ---------- */
 
 .icon-btn {

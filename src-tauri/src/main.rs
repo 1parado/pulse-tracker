@@ -115,6 +115,7 @@ fn main() {
             commands::update_issue,
             commands::delete_issue,
             commands::get_issue,
+            commands::search_issues,
             commands::list_projects,
             commands::create_project,
             commands::update_project,

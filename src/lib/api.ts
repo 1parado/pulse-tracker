@@ -27,6 +27,7 @@ export const api = {
   // issues
   listIssues: () => invoke<Issue[]>("list_issues"),
   getIssue: (id: string) => invoke<Issue>("get_issue", { id }),
+  searchIssues: (query: string) => invoke<Issue[]>("search_issues", { query }),
   createIssue: (input: NewIssueInput) => invoke<Issue>("create_issue", { input }),
   updateIssue: (input: UpdateIssueInput) => invoke<Issue>("update_issue", { input }),
   deleteIssue: (id: string) => invoke<void>("delete_issue", { id }),

@@ -46,6 +46,9 @@ export default function App() {
 
   const [displayName, setDisplayName] = useState("");
   const [ghToken, setGhToken] = useState("");
+  const [query, setQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<Issue[] | null>(null);
+  const [statusFilter, setStatusFilter] = useState<Status[]>([]);
 
   const refresh = useCallback(async () => {
     const [i, p, c] = await Promise.all([api.listIssues(), api.listProjects(), api.listCycles()]);
@@ -69,11 +72,40 @@ export default function App() {
     };
   }, []);
 
+  // 全局搜索（250ms 防抖；后端查标题/描述/编号/评论）
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setSearchHits(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .searchIssues(q)
+        .then((hits) => setSearchHits(query.trim() === q ? hits : null))
+        .catch(() => setSearchHits(null));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
   const visible = useMemo(() => {
-    if (view.kind === "project") return issues.filter((i) => i.projectId === view.id);
-    if (view.kind === "cycle") return issues.filter((i) => i.cycleId === view.id);
-    return issues;
-  }, [issues, view]);
+    let base: Issue[];
+    if (searchHits != null) {
+      // 搜索激活：跨项目/周期全局结果
+      base = searchHits;
+    } else if (view.kind === "project") {
+      base = issues.filter((i) => i.projectId === view.id);
+    } else if (view.kind === "cycle") {
+      base = issues.filter((i) => i.cycleId === view.id);
+    } else {
+      base = issues;
+    }
+    if (statusFilter.length > 0) base = base.filter((i) => statusFilter.includes(i.status));
+    return base;
+  }, [issues, view, searchHits, statusFilter]);
+
+  const toggleStatusFilter = (s: Status) =>
+    setStatusFilter((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
 
   const flat = useMemo(
     () => STATUS_ORDER.flatMap((s) => visible.filter((i) => i.status === s)),
@@ -179,6 +211,13 @@ export default function App() {
       const denom = list.length - canceled;
       return denom > 0 ? done / denom : 0;
     };
+    if (searchHits != null) {
+      return {
+        title: `搜索「${query.trim()}」`,
+        sub: `${visible.length} 条结果`,
+        progress: null as number | null,
+      };
+    }
     if (view.kind === "project") {
       const p = projects.find((x) => x.id === view.id);
       return {
@@ -198,7 +237,7 @@ export default function App() {
       };
     }
     return { title: "全部问题", sub: `${issues.length} 个问题`, progress: null };
-  }, [view, visible, projects, cycles, issues.length]);
+  }, [view, visible, projects, cycles, issues.length, searchHits, query]);
 
   const saveSettings = async (dn: string, gt: string) => {
     await api.setSetting("display_name", dn);
@@ -288,6 +327,10 @@ export default function App() {
         onNewIssue={() => setNewIssueOpen(true)}
         progress={viewInfo.progress}
         onStatusChange={onStatusChange}
+        query={query}
+        onQueryChange={setQuery}
+        statusFilter={statusFilter}
+        onToggleStatus={toggleStatusFilter}
       />
 
       <IssueDetail

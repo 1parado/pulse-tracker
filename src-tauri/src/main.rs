@@ -7,11 +7,24 @@ mod models;
 mod notes;
 
 use std::sync::Mutex;
-use tauri::{Manager, WindowEvent};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager,
+};
 
 pub struct AppState {
     pub conn: Mutex<rusqlite::Connection>,
     pub data_dir: std::path::PathBuf,
+}
+
+/// 显示并聚焦主窗口
+fn show_main<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
 }
 
 fn main() {
@@ -28,12 +41,13 @@ fn main() {
                 data_dir: dir,
             });
 
-            // 主窗口关闭即整体退出（即使还有便签窗口开着），避免无托盘时的孤儿进程
+            // 主窗点 X → 隐藏到托盘（便签继续驻留），退出走托盘菜单
             if let Some(main_win) = app.get_webview_window("main") {
-                let handle = app.handle().clone();
+                let win = main_win.clone();
                 main_win.on_window_event(move |event| {
-                    if let WindowEvent::Destroyed = event {
-                        handle.exit(0);
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win.hide();
                     }
                 });
             }
@@ -47,6 +61,52 @@ fn main() {
             for id in ids {
                 let _ = notes::open(app.handle(), &id);
             }
+
+            // 系统托盘：左键切换主窗显隐，右键菜单
+            let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+            let new_issue = MenuItem::with_id(app, "new_issue", "新建问题", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出 Pulse", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &new_issue, &quit])?;
+
+            let icon = app
+                .default_window_icon()
+                .cloned()
+                .ok_or("missing default window icon")?;
+            TrayIconBuilder::with_id("pulse-tray")
+                .icon(icon)
+                .tooltip("Pulse")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => show_main(app),
+                    "new_issue" => {
+                        show_main(app);
+                        let _ = app.emit("tray://new-issue", ());
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(win) = app.get_webview_window("main") {
+                            let visible = win.is_visible().unwrap_or(false);
+                            if visible {
+                                let _ = win.hide();
+                            } else {
+                                let _ = win.show();
+                                let _ = win.unminimize();
+                                let _ = win.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

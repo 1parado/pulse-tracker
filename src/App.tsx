@@ -9,6 +9,7 @@ import {
   StickyNote as StickyNoteIcon,
   Sun,
 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import { api } from "./lib/api";
 import { toast, ToastHost } from "./lib/toast";
 import type { Cycle, Issue, Project, Status, View } from "./lib/types";
@@ -57,6 +58,14 @@ export default function App() {
     api.getSetting("github_token").then((v) => setGhToken(v ?? "")).catch(() => {});
     api.listStickies().then(setStickyIds).catch(() => {});
   }, [refresh]);
+
+  // 托盘菜单「新建问题」
+  useEffect(() => {
+    const un = listen("tray://new-issue", () => setNewIssueOpen(true));
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
+  }, []);
 
   const visible = useMemo(() => {
     if (view.kind === "project") return issues.filter((i) => i.projectId === view.id);

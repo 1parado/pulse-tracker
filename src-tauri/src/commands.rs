@@ -37,11 +37,42 @@ pub fn create_issue(state: State<'_, AppState>, input: NewIssue) -> Result<Issue
         gh_state: None,
         gh_title: None,
         gh_url: None,
+        archived: false,
         created_at: String::new(),
         updated_at: String::new(),
     };
     db::insert_issue(&conn, &issue)?;
     db::get_issue(&conn, &issue.id)
+}
+
+#[tauri::command]
+pub fn set_issue_archived(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    archived: bool,
+) -> Result<Issue, String> {
+    let pinned = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        db::set_issue_archived(&conn, &id, archived)?;
+        // 归档的同时收起桌面便签
+        let pinned = archived && notes::list(&conn)?.iter().any(|x| x == &id);
+        if pinned {
+            notes::remove(&conn, &id)?;
+        }
+        pinned
+    };
+    if pinned {
+        notes::close_window(&app, &id);
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    db::get_issue(&conn, &id)
+}
+
+#[tauri::command]
+pub fn list_archived_issues(state: State<'_, AppState>) -> Result<Vec<Issue>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    db::list_archived_issues(&conn)
 }
 
 #[tauri::command]
@@ -83,16 +114,28 @@ pub fn update_issue(state: State<'_, AppState>, input: UpdateIssue) -> Result<Is
 
 #[tauri::command]
 pub fn delete_issue(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let paths = {
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        db::delete_issue_rows(&conn, &id)?
-    };
-    for p in paths {
-        std::fs::remove_file(&p).ok();
-    }
-    // 问题删除后同步收起其桌面便签
+    // 1. 锁内采集快照、删行、附件移入回收站、存快照、收便签标记
     let pinned = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let (issue, comments, attachments) = db::collect_issue_snapshot(&conn, &id)?;
+        let paths = db::delete_issue_rows(&conn, &id)?;
+        let snapshot = IssueSnapshot {
+            trash_id: id.clone(),
+            deleted_at: now_secs(),
+            issue,
+            comments,
+            attachments,
+        };
+        // 附件文件移入回收站目录（撤销时可恢复），永久清除在启动清理时执行
+        let trash_dir = state.data_dir.join("trash").join(&id);
+        std::fs::create_dir_all(&trash_dir).map_err(|e| e.to_string())?;
+        for p in paths {
+            if let Some(fname) = std::path::Path::new(&p).file_name() {
+                std::fs::rename(&p, trash_dir.join(fname)).ok();
+            }
+        }
+        let json = serde_json::to_string(&snapshot).map_err(|e| e.to_string())?;
+        db::set_setting(&conn, &format!("trash:{}", id), &json)?;
         let pinned = notes::list(&conn)?.iter().any(|x| x == &id);
         if pinned {
             notes::remove(&conn, &id)?;
@@ -103,6 +146,66 @@ pub fn delete_issue(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         notes::close_window(&app, &id);
     }
     Ok(())
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
+
+/// 撤销删除：从回收站快照恢复问题（含评论与附件）
+#[tauri::command]
+pub fn restore_issue(state: State<'_, AppState>, id: String) -> Result<Issue, String> {
+    let json = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        db::get_setting(&conn, &format!("trash:{}", id))?
+    }
+    .ok_or_else(|| "回收站中未找到该问题".to_string())?;
+    let snap: IssueSnapshot = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+
+    // 附件文件移回原位置
+    for a in &snap.attachments {
+        let path = std::path::Path::new(&a.path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        let fname = path.file_name().unwrap_or_default();
+        let trash_file = state.data_dir.join("trash").join(&id).join(fname);
+        if trash_file.exists() {
+            std::fs::rename(&trash_file, path).ok();
+        }
+    }
+
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    db::restore_issue_snapshot(&conn, &snap.issue, &snap.comments, &snap.attachments)?;
+    db::del_setting(&conn, &format!("trash:{}", id))?;
+    db::get_issue(&conn, &id)
+}
+
+/// 启动时清理超过保留期的回收站快照（附件永久删除）
+pub fn cleanup_expired_trash(state: &AppState, max_age_secs: i64) {
+    let conn = match state.conn.lock() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let rows = match db::list_settings_by_prefix(&conn, "trash:") {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    let now = now_secs();
+    for (key, json) in rows {
+        let expired = serde_json::from_str::<IssueSnapshot>(&json)
+            .map(|s| now - s.deleted_at > max_age_secs)
+            .unwrap_or(true); // 无法解析的残缺快照直接清理
+        if expired {
+            if let Ok(s) = serde_json::from_str::<IssueSnapshot>(&json) {
+                std::fs::remove_dir_all(state.data_dir.join("trash").join(&s.trash_id)).ok();
+            }
+            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", [&key]);
+        }
+    }
 }
 
 #[tauri::command]

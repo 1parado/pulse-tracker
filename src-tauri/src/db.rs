@@ -10,9 +10,9 @@ pub fn init(path: &Path) -> Result<Connection, String> {
     Ok(conn)
 }
 
-/// 增量迁移：v0.3.0 评论表增加 gh_id（GitHub 评论 id，用于双向同步去重）
+/// 增量迁移：v0.3.0 评论表 gh_id、issues 表 archived
 fn migrate(conn: &Connection) -> Result<(), String> {
-    let has_gh_id: bool = conn
+    let add_gh_id: bool = conn
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('comments') WHERE name = 'gh_id'",
             [],
@@ -20,8 +20,20 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         )
         .map(|n| n > 0)
         .map_err(|e| e.to_string())?;
-    if !has_gh_id {
+    if !add_gh_id {
         conn.execute_batch("ALTER TABLE comments ADD COLUMN gh_id INTEGER;")
+            .map_err(|e| e.to_string())?;
+    }
+    let add_archived: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('issues') WHERE name = 'archived'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .map_err(|e| e.to_string())?;
+    if !add_archived {
+        conn.execute_batch("ALTER TABLE issues ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;")
             .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -63,6 +75,7 @@ CREATE TABLE IF NOT EXISTS issues (
   gh_state TEXT,
   gh_title TEXT,
   gh_url TEXT,
+  archived INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -104,6 +117,7 @@ fn issue_from_row(row: &rusqlite::Row) -> rusqlite::Result<Issue> {
         gh_state: row.get("gh_state")?,
         gh_title: row.get("gh_title")?,
         gh_url: row.get("gh_url")?,
+        archived: row.get::<_, i64>("archived").unwrap_or(0) != 0,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })
@@ -175,6 +189,23 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<(), Stri
     Ok(())
 }
 
+pub fn del_setting(conn: &Connection, key: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM settings WHERE key = ?1", params![key])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn list_settings_by_prefix(conn: &Connection, prefix: &str) -> Result<Vec<(String, String)>, String> {
+    let pattern = format!("{}%", prefix.replace('%', "\\%"));
+    let mut stmt = conn
+        .prepare("SELECT key, value FROM settings WHERE key LIKE ?1 ESCAPE '\\'")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 // ---------- issues ----------
 
 pub fn next_seq(conn: &Connection) -> Result<i64, String> {
@@ -186,12 +217,31 @@ pub fn next_seq(conn: &Connection) -> Result<i64, String> {
 
 pub fn list_issues(conn: &Connection) -> Result<Vec<Issue>, String> {
     let mut stmt = conn
-        .prepare("SELECT * FROM issues ORDER BY seq DESC")
+        .prepare("SELECT * FROM issues WHERE archived = 0 ORDER BY seq DESC")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], issue_from_row)
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn list_archived_issues(conn: &Connection) -> Result<Vec<Issue>, String> {
+    let mut stmt = conn
+        .prepare("SELECT * FROM issues WHERE archived = 1 ORDER BY seq DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], issue_from_row)
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn set_issue_archived(conn: &Connection, id: &str, archived: bool) -> Result<(), String> {
+    conn.execute(
+        "UPDATE issues SET archived = ?1, updated_at = datetime('now') WHERE id = ?2",
+        params![archived as i64, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn get_issue(conn: &Connection, id: &str) -> Result<Issue, String> {
@@ -209,10 +259,11 @@ pub fn search_issues(conn: &Connection, q: &str) -> Result<Vec<Issue>, String> {
     );
     let sql = "SELECT DISTINCT i.* FROM issues i
                LEFT JOIN comments c ON c.issue_id = i.id
-               WHERE i.title LIKE ?1 ESCAPE '\\'
+               WHERE (i.title LIKE ?1 ESCAPE '\\'
                   OR i.description LIKE ?1 ESCAPE '\\'
                   OR i.display_key LIKE ?1 ESCAPE '\\'
-                  OR c.body LIKE ?1 ESCAPE '\\'
+                  OR c.body LIKE ?1 ESCAPE '\\')
+                 AND i.archived = 0
                ORDER BY i.seq DESC";
     let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
     let rows = stmt
@@ -245,8 +296,49 @@ pub fn update_issue_full(conn: &Connection, i: &Issue) -> Result<(), String> {
     Ok(())
 }
 
-pub fn delete_issue_rows(conn: &Connection, id: &str) -> Result<Vec<String>, String> {
-    let mut paths = Vec::new();
+/// 删除撤销：采集问题的完整快照（问题 + 评论 + 附件行）后再删行
+pub fn collect_issue_snapshot(conn: &Connection, id: &str) -> Result<(Issue, Vec<Comment>, Vec<Attachment>), String> {
+    let issue = get_issue(conn, id)?;
+    let comments = list_comments(conn, id)?;
+    let mut stmt = conn
+        .prepare("SELECT * FROM attachments WHERE issue_id = ?1 ORDER BY created_at ASC, rowid ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![id], attachment_from_row)
+        .map_err(|e| e.to_string())?;
+    let attachments = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok((issue, comments, attachments))
+}
+
+/// 撤销删除：按快照完整恢复（保留原 id / 时间戳 / GitHub 链接）
+pub fn restore_issue_snapshot(
+    conn: &Connection,
+    issue: &Issue,
+    comments: &[Comment],
+    attachments: &[Attachment],
+) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO issues (id, seq, display_key, project_id, cycle_id, title, description,
+         status, priority, gh_repo, gh_number, gh_state, gh_title, gh_url, archived, created_at, updated_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+        params![
+            issue.id, issue.seq, issue.display_key, issue.project_id, issue.cycle_id,
+            issue.title, issue.description, issue.status, issue.priority,
+            issue.gh_repo, issue.gh_number, issue.gh_state, issue.gh_title, issue.gh_url,
+            issue.archived as i64, issue.created_at, issue.updated_at
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    for c in comments {
+        insert_comment(conn, c)?;
+    }
+    for a in attachments {
+        insert_attachment(conn, a)?;
+    }
+    Ok(())
+}
+
+pub fn delete_issue_rows(conn: &Connection, id: &str) -> Result<Vec<String>, String> {    let mut paths = Vec::new();
     {
         let mut stmt = conn
             .prepare("SELECT path FROM attachments WHERE issue_id = ?1")

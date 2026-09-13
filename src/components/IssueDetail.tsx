@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Eye, FileText, Github, MessageSquare, MousePointerClick, Paperclip, Pencil, Plus, RefreshCw, StickyNote as StickyNoteIcon, Trash2, Unlink, X } from "lucide-react";
+import { Archive, ArchiveRestore, ExternalLink, Eye, FileText, Github, MessageSquare, MousePointerClick, Paperclip, Pencil, Plus, RefreshCw, StickyNote as StickyNoteIcon, Trash2, Unlink, X } from "lucide-react";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { api, type UpdateIssueInput } from "../lib/api";
 import { toast } from "../lib/toast";
@@ -23,6 +23,7 @@ export function IssueDetail({
   cycles,
   onUpdated,
   onDeleted,
+  onToggleArchive,
   stickyPinned,
   onToggleSticky,
 }: {
@@ -30,7 +31,8 @@ export function IssueDetail({
   projects: Project[];
   cycles: Cycle[];
   onUpdated: (i: Issue) => void;
-  onDeleted: (id: string) => void;
+  onDeleted: (i: Issue) => void;
+  onToggleArchive: (i: Issue) => void;
   stickyPinned: boolean;
   onToggleSticky: (i: Issue) => void;
 }) {
@@ -158,9 +160,13 @@ export function IssueDetail({
   };
 
   const delIssue = async () => {
-    if (!confirm(`删除问题 ${issue.displayKey}？评论与附件将一并删除。`)) return;
-    await api.deleteIssue(issue.id);
-    onDeleted(issue.id);
+    if (!confirm(`删除问题 ${issue.displayKey}？删除后可在通知中撤销，评论与附件一并进入回收站。`)) return;
+    try {
+      await api.deleteIssue(issue.id);
+      onDeleted(issue);
+    } catch (e) {
+      toast(`删除失败：${e}`, "error");
+    }
   };
 
   const cycleOptions = cycles.filter((c) => !issue.projectId || c.projectId === issue.projectId);
@@ -178,6 +184,13 @@ export function IssueDetail({
             title={stickyPinned ? "取消桌面便签" : "钉为桌面便签"}
           >
             <StickyNoteIcon size={15} />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => onToggleArchive(issue)}
+            title={issue.archived ? "取消归档" : "归档问题"}
+          >
+            {issue.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
           </button>
           <button className="icon-btn" onClick={delIssue} title="删除问题">
             <Trash2 size={15} />

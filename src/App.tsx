@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Archive,
   CalendarPlus,
   Folder,
   FolderPlus,
@@ -30,6 +31,7 @@ export default function App() {
   }, [theme]);
 
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [archivedIssues, setArchivedIssues] = useState<Issue[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [view, setView] = useState<View>({ kind: "all" });
@@ -51,10 +53,16 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<Status[]>([]);
 
   const refresh = useCallback(async () => {
-    const [i, p, c] = await Promise.all([api.listIssues(), api.listProjects(), api.listCycles()]);
+    const [i, p, c, a] = await Promise.all([
+      api.listIssues(),
+      api.listProjects(),
+      api.listCycles(),
+      api.listArchivedIssues(),
+    ]);
     setIssues(i);
     setProjects(p);
     setCycles(c);
+    setArchivedIssues(a);
   }, []);
 
   useEffect(() => {
@@ -97,12 +105,14 @@ export default function App() {
       base = issues.filter((i) => i.projectId === view.id);
     } else if (view.kind === "cycle") {
       base = issues.filter((i) => i.cycleId === view.id);
+    } else if (view.kind === "archive") {
+      base = archivedIssues;
     } else {
       base = issues;
     }
     if (statusFilter.length > 0) base = base.filter((i) => statusFilter.includes(i.status));
     return base;
-  }, [issues, view, searchHits, statusFilter]);
+  }, [issues, archivedIssues, view, searchHits, statusFilter]);
 
   const toggleStatusFilter = (s: Status) =>
     setStatusFilter((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
@@ -116,7 +126,10 @@ export default function App() {
     flatRef.current = flat;
   }, [flat]);
 
-  const selected = issues.find((i) => i.id === selectedId) ?? null;
+  const selected =
+    issues.find((i) => i.id === selectedId) ??
+    archivedIssues.find((i) => i.id === selectedId) ??
+    null;
 
   const move = useCallback(
     (d: number) => {
@@ -168,9 +181,22 @@ export default function App() {
   });
 
   const onIssueUpdated = (u: Issue) => setIssues((list) => list.map((i) => (i.id === u.id ? u : i)));
-  const onIssueDeleted = (id: string) => {
-    setIssues((list) => list.filter((i) => i.id !== id));
+  const onIssueDeleted = (issue: Issue) => {
+    setIssues((list) => list.filter((i) => i.id !== issue.id));
+    setArchivedIssues((list) => list.filter((i) => i.id !== issue.id));
     setSelectedId(null);
+    toast(`已删除 ${issue.displayKey}`, "ok", {
+      label: "撤销",
+      run: () => {
+        api
+          .restoreIssue(issue.id)
+          .then((restored) => {
+            setIssues((list) => [restored, ...list]);
+            toast(`已恢复 ${restored.displayKey}`, "ok");
+          })
+          .catch((e) => toast(`恢复失败：${e}`, "error"));
+      },
+    });
   };
   const onIssueCreated = (i: Issue) => {
     setIssues((list) => [i, ...list]);
@@ -182,6 +208,33 @@ export default function App() {
       .updateIssue({ id, status })
       .then(onIssueUpdated)
       .catch((e) => toast(`状态更新失败：${e}`, "error"));
+  };
+
+  const toggleArchive = (issue: Issue) => {
+    const archiving = !issue.archived;
+    api
+      .setIssueArchived(issue.id, archiving)
+      .then(() => {
+        setIssues((list) => list.filter((i) => i.id !== issue.id));
+        setArchivedIssues((list) => (archiving ? [issue, ...list] : list.filter((i) => i.id !== issue.id)));
+        if (archiving) setSelectedId(null);
+        toast(archiving ? `已归档 ${issue.displayKey}` : `已恢复 ${issue.displayKey}`, "ok", archiving
+          ? {
+              label: "撤销",
+              run: () => {
+                api
+                  .setIssueArchived(issue.id, false)
+                  .then((restored) => {
+                    setArchivedIssues((list) => list.filter((i) => i.id !== issue.id));
+                    setIssues((list) => [restored, ...list]);
+                    toast(`已恢复 ${restored.displayKey}`, "ok");
+                  })
+                  .catch((e) => toast(`恢复失败：${e}`, "error"));
+              },
+            }
+          : undefined);
+      })
+      .catch((e) => toast(`操作失败：${e}`, "error"));
   };
 
   const toggleSticky = (issue: Issue) => {
@@ -217,6 +270,9 @@ export default function App() {
         sub: `${visible.length} 条结果`,
         progress: null as number | null,
       };
+    }
+    if (view.kind === "archive") {
+      return { title: "归档", sub: `${visible.length} 个问题`, progress: null as number | null };
     }
     if (view.kind === "project") {
       const p = projects.find((x) => x.id === view.id);
@@ -314,6 +370,7 @@ export default function App() {
         onDeleteProject={deleteProject}
         onEditCycle={(c) => setEditingCycle(c)}
         onDeleteCycle={deleteCycle}
+        onOpenArchive={() => navigateAndClose({ kind: "archive" })}
         onOpenSettings={() => setSettingsOpen(true)}
         onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
@@ -339,6 +396,7 @@ export default function App() {
         cycles={cycles}
         onUpdated={onIssueUpdated}
         onDeleted={onIssueDeleted}
+        onToggleArchive={toggleArchive}
         stickyPinned={selected != null && stickyIds.includes(selected.id)}
         onToggleSticky={toggleSticky}
       />
@@ -353,6 +411,7 @@ export default function App() {
           { label: "新建问题", icon: <Plus size={14} />, run: () => setNewIssueOpen(true) },
           { label: "新建项目", icon: <FolderPlus size={14} />, run: () => setNewProjectOpen(true) },
           { label: "新建周期", icon: <CalendarPlus size={14} />, run: () => setNewCycleOpen(true) },
+          { label: "打开归档", icon: <Archive size={14} />, run: () => navigateAndClose({ kind: "archive" }) },
           { label: "打开设置", icon: <SettingsIcon size={14} />, run: () => setSettingsOpen(true) },
           {
             label: "切换主题",
@@ -367,6 +426,11 @@ export default function App() {
                     : "把当前问题钉为桌面便签",
                   icon: <StickyNoteIcon size={14} />,
                   run: () => toggleSticky(selected),
+                },
+                {
+                  label: selected.archived ? "取消归档当前问题" : "归档当前问题",
+                  icon: <Archive size={14} />,
+                  run: () => toggleArchive(selected),
                 },
               ]
             : []),

@@ -43,6 +43,9 @@ fn main() {
                 data_dir: dir,
             });
 
+            // 清理超过 7 天的回收站快照（附件永久删除）
+            commands::cleanup_expired_trash(&app.state::<AppState>(), 7 * 24 * 3600);
+
             // 主窗点 X → 隐藏到托盘（便签继续驻留），退出走托盘菜单
             if let Some(main_win) = app.get_webview_window("main") {
                 let win = main_win.clone();
@@ -137,11 +140,14 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_issues,
+            commands::list_archived_issues,
             commands::create_issue,
             commands::update_issue,
             commands::delete_issue,
+            commands::restore_issue,
             commands::get_issue,
             commands::search_issues,
+            commands::set_issue_archived,
             commands::list_projects,
             commands::create_project,
             commands::update_project,

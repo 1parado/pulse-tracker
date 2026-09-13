@@ -17,6 +17,7 @@ pub struct Issue {
     pub gh_state: Option<String>,
     pub gh_title: Option<String>,
     pub gh_url: Option<String>,
+    pub archived: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -167,4 +168,15 @@ pub struct GhComment {
 #[derive(Debug, Deserialize)]
 pub struct GhUser {
     pub login: String,
+}
+
+/// 删除撤销用的完整快照（问题 + 评论 + 附件行）
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueSnapshot {
+    pub trash_id: String,
+    pub deleted_at: i64,
+    pub issue: Issue,
+    pub comments: Vec<Comment>,
+    pub attachments: Vec<Attachment>,
 }

@@ -309,6 +309,20 @@ button {
   padding: 1px 4px;
 }
 
+.toast-action {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.toast-action:hover {
+  background: var(--hover);
+}
+
 .comment-gh {
   vertical-align: -1px;
   margin-right: 3px;

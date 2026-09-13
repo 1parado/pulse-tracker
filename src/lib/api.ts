@@ -26,6 +26,10 @@ export interface UpdateIssueInput {
 export const api = {
   // issues
   listIssues: () => invoke<Issue[]>("list_issues"),
+  listArchivedIssues: () => invoke<Issue[]>("list_archived_issues"),
+  setIssueArchived: (id: string, archived: boolean) =>
+    invoke<Issue>("set_issue_archived", { id, archived }),
+  restoreIssue: (id: string) => invoke<Issue>("restore_issue", { id }),
   getIssue: (id: string) => invoke<Issue>("get_issue", { id }),
   searchIssues: (query: string) => invoke<Issue[]>("search_issues", { query }),
   createIssue: (input: NewIssueInput) => invoke<Issue>("create_issue", { input }),

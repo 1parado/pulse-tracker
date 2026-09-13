@@ -1,4 +1,4 @@
-import { CalendarRange, ListTodo, Moon, Pencil, Plus, Settings, Sun, Trash2 } from "lucide-react";
+import { Archive, CalendarRange, ListTodo, Moon, Pencil, Plus, Settings, Sun, Trash2 } from "lucide-react";
 import type { Cycle, Project, View } from "../lib/types";
 
 export function Sidebar({
@@ -14,6 +14,7 @@ export function Sidebar({
   onDeleteProject,
   onEditCycle,
   onDeleteCycle,
+  onOpenArchive,
   onOpenSettings,
   onToggleTheme,
 }: {
@@ -29,6 +30,7 @@ export function Sidebar({
   onDeleteProject: (p: Project) => void;
   onEditCycle: (c: Cycle) => void;
   onDeleteCycle: (c: Cycle) => void;
+  onOpenArchive: () => void;
   onOpenSettings: () => void;
   onToggleTheme: () => void;
 }) {
@@ -54,6 +56,17 @@ export function Sidebar({
         >
           <ListTodo size={15} />
           <span className="nav-label">全部问题</span>
+        </div>
+
+        <div
+          className={"nav-item" + (view.kind === "archive" ? " active" : "")}
+          role="button"
+          tabIndex={0}
+          onClick={onOpenArchive}
+          onKeyDown={(e) => e.key === "Enter" && onOpenArchive()}
+        >
+          <Archive size={15} />
+          <span className="nav-label">归档</span>
         </div>
 
         <div className="nav-section">

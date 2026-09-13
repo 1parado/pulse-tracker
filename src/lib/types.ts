@@ -16,6 +16,7 @@ export interface Issue {
   ghState: string | null;
   ghTitle: string | null;
   ghUrl: string | null;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +59,7 @@ export interface Attachment {
 
 export type View =
   | { kind: "all" }
+  | { kind: "archive" }
   | { kind: "project"; id: string }
   | { kind: "cycle"; id: string };
 

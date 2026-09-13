@@ -104,7 +104,27 @@ pub struct NewProject {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateProject {
+    pub id: String,
+    pub name: String,
+    pub prefix: String,
+    pub color: String,
+    pub description: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NewCycle {
+    pub name: String,
+    pub project_id: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCycle {
+    pub id: String,
     pub name: String,
     pub project_id: Option<String>,
     pub start_date: Option<String>,

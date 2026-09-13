@@ -131,24 +131,30 @@ export function NewIssueModal({
 export function NewProjectModal({
   open,
   onClose,
+  editing,
   onCreated,
+  onUpdated,
 }: {
   open: boolean;
   onClose: () => void;
+  editing?: Project | null;
   onCreated: (p: Project) => void;
+  onUpdated: (p: Project) => void;
 }) {
   const [name, setName] = useState("");
   const [prefix, setPrefix] = useState("");
   const [color, setColor] = useState("#6E7BF2");
+  const [desc, setDesc] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setName("");
-      setPrefix("");
-      setColor("#6E7BF2");
+      setName(editing?.name ?? "");
+      setPrefix(editing?.prefix ?? "");
+      setColor(editing?.color ?? "#6E7BF2");
+      setDesc(editing?.description ?? "");
     }
-  }, [open]);
+  }, [open, editing]);
 
   if (!open) return null;
 
@@ -156,8 +162,19 @@ export function NewProjectModal({
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
-      const p = await api.createProject({ name: name.trim(), prefix: prefix || undefined, color });
-      onCreated(p);
+      if (editing) {
+        const p = await api.updateProject({
+          id: editing.id,
+          name: name.trim(),
+          prefix: prefix.trim() || editing.prefix,
+          color,
+          description: desc.trim(),
+        });
+        onUpdated(p);
+      } else {
+        const p = await api.createProject({ name: name.trim(), prefix: prefix || undefined, color });
+        onCreated(p);
+      }
       onClose();
     } finally {
       setBusy(false);
@@ -167,7 +184,7 @@ export function NewProjectModal({
   const COLORS = ["#6E7BF2", "#58C48F", "#F5B83D", "#E5566A", "#4CB8E8", "#C77DE8"];
 
   return (
-    <Modal title="新建项目" onClose={onClose} width={440}>
+    <Modal title={editing ? "编辑项目" : "新建项目"} onClose={onClose} width={440}>
       <div className="modal-body">
         <input
           className="input"
@@ -180,7 +197,13 @@ export function NewProjectModal({
         <div className="form-grid two">
           <label className="prop">
             <span className="prop-label">问题前缀（如 PLS）</span>
-            <input className="input" placeholder="自动生成" value={prefix} onChange={(e) => setPrefix(e.target.value)} maxLength={5} />
+            <input
+              className="input"
+              placeholder="自动生成"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+              maxLength={5}
+            />
           </label>
           <div className="prop">
             <span className="prop-label">颜色</span>
@@ -196,11 +219,23 @@ export function NewProjectModal({
             </div>
           </div>
         </div>
+        <label className="prop">
+          <span className="prop-label">描述（可选）</span>
+          <input
+            className="input"
+            placeholder="这个项目是做什么的"
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+          />
+        </label>
+        {editing && (
+          <p className="form-note">修改前缀不影响已生成的问题编号。</p>
+        )}
       </div>
       <div className="modal-foot">
         <span />
         <button className="btn primary" disabled={!name.trim() || busy} onClick={submit}>
-          创建
+          {editing ? "保存" : "创建"}
         </button>
       </div>
     </Modal>
@@ -211,12 +246,16 @@ export function NewCycleModal({
   open,
   onClose,
   projects,
+  editing,
   onCreated,
+  onUpdated,
 }: {
   open: boolean;
   onClose: () => void;
   projects: Project[];
+  editing?: Cycle | null;
   onCreated: (c: Cycle) => void;
+  onUpdated: (c: Cycle) => void;
 }) {
   const [name, setName] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -226,12 +265,12 @@ export function NewCycleModal({
 
   useEffect(() => {
     if (open) {
-      setName("");
-      setProjectId("");
-      setStart("");
-      setEnd("");
+      setName(editing?.name ?? "");
+      setProjectId(editing?.projectId ?? "");
+      setStart(editing?.startDate ?? "");
+      setEnd(editing?.endDate ?? "");
     }
-  }, [open]);
+  }, [open, editing]);
 
   if (!open) return null;
 
@@ -239,13 +278,24 @@ export function NewCycleModal({
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
-      const c = await api.createCycle({
-        name: name.trim(),
-        projectId: projectId || null,
-        startDate: start || null,
-        endDate: end || null,
-      });
-      onCreated(c);
+      if (editing) {
+        const c = await api.updateCycle({
+          id: editing.id,
+          name: name.trim(),
+          projectId: projectId || null,
+          startDate: start || null,
+          endDate: end || null,
+        });
+        onUpdated(c);
+      } else {
+        const c = await api.createCycle({
+          name: name.trim(),
+          projectId: projectId || null,
+          startDate: start || null,
+          endDate: end || null,
+        });
+        onCreated(c);
+      }
       onClose();
     } finally {
       setBusy(false);
@@ -253,7 +303,7 @@ export function NewCycleModal({
   };
 
   return (
-    <Modal title="新建周期" onClose={onClose} width={440}>
+    <Modal title={editing ? "编辑周期" : "新建周期"} onClose={onClose} width={440}>
       <div className="modal-body">
         <input
           className="input"
@@ -283,11 +333,14 @@ export function NewCycleModal({
             <input className="input" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
           </label>
         </div>
+        {editing && (
+          <p className="form-note">更换所属项目后，原挂靠在该周期的问题将脱离周期。</p>
+        )}
       </div>
       <div className="modal-foot">
         <span />
         <button className="btn primary" disabled={!name.trim() || busy} onClick={submit}>
-          创建
+          {editing ? "保存" : "创建"}
         </button>
       </div>
     </Modal>

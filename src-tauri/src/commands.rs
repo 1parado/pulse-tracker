@@ -160,6 +160,19 @@ pub fn delete_project(state: State<'_, AppState>, id: String) -> Result<(), Stri
     db::delete_project(&conn, &id)
 }
 
+#[tauri::command]
+pub fn update_project(state: State<'_, AppState>, input: UpdateProject) -> Result<Project, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut p = db::get_project(&conn, &input.id)?
+        .ok_or_else(|| "project not found".to_string())?;
+    p.name = input.name.trim().to_string();
+    p.prefix = input.prefix.trim().to_ascii_uppercase();
+    p.color = input.color;
+    p.description = input.description;
+    db::update_project(&conn, &p)?;
+    Ok(p)
+}
+
 // ---------- cycles ----------
 
 #[tauri::command]
@@ -187,6 +200,26 @@ pub fn create_cycle(state: State<'_, AppState>, input: NewCycle) -> Result<Cycle
 pub fn delete_cycle(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     db::delete_cycle(&conn, &id)
+}
+
+#[tauri::command]
+pub fn update_cycle(state: State<'_, AppState>, input: UpdateCycle) -> Result<Cycle, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let old = db::get_cycle(&conn, &input.id)?;
+    let c = Cycle {
+        id: input.id,
+        project_id: input.project_id,
+        name: input.name.trim().to_string(),
+        start_date: input.start_date.filter(|s| !s.is_empty()),
+        end_date: input.end_date.filter(|s| !s.is_empty()),
+        created_at: old.created_at,
+    };
+    // 周期换了所属项目时，原挂靠问题脱离该周期，避免跨项目错挂
+    if old.project_id != c.project_id {
+        db::detach_issues_from_cycle(&conn, &c.id)?;
+    }
+    db::update_cycle(&conn, &c)?;
+    Ok(c)
 }
 
 // ---------- comments ----------

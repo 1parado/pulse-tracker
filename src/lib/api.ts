@@ -39,6 +39,13 @@ export const api = {
     color?: string;
     description?: string;
   }) => invoke<Project>("create_project", { input }),
+  updateProject: (input: {
+    id: string;
+    name: string;
+    prefix: string;
+    color: string;
+    description: string;
+  }) => invoke<Project>("update_project", { input }),
   deleteProject: (id: string) => invoke<void>("delete_project", { id }),
 
   // cycles
@@ -49,6 +56,13 @@ export const api = {
     startDate?: string | null;
     endDate?: string | null;
   }) => invoke<Cycle>("create_cycle", { input }),
+  updateCycle: (input: {
+    id: string;
+    name: string;
+    projectId: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  }) => invoke<Cycle>("update_cycle", { input }),
   deleteCycle: (id: string) => invoke<void>("delete_cycle", { id }),
 
   // comments

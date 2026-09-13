@@ -254,7 +254,22 @@ pub fn insert_project(conn: &Connection, p: &Project) -> Result<(), String> {
     Ok(())
 }
 
+pub fn update_project(conn: &Connection, p: &Project) -> Result<(), String> {
+    conn.execute(
+        "UPDATE projects SET name=?1, prefix=?2, color=?3, description=?4 WHERE id=?5",
+        params![p.name, p.prefix, p.color, p.description, p.id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn delete_project(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE issues SET cycle_id = NULL
+         WHERE cycle_id IN (SELECT id FROM cycles WHERE project_id = ?1)",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     conn.execute("UPDATE issues SET project_id = NULL WHERE project_id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM cycles WHERE project_id = ?1", params![id])
@@ -290,6 +305,20 @@ pub fn insert_cycle(conn: &Connection, c: &Cycle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn update_cycle(conn: &Connection, c: &Cycle) -> Result<(), String> {
+    conn.execute(
+        "UPDATE cycles SET project_id=?1, name=?2, start_date=?3, end_date=?4 WHERE id=?5",
+        params![c.project_id, c.name, c.start_date, c.end_date, c.id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn detach_issues_from_cycle(conn: &Connection, cycle_id: &str) -> Result<usize, String> {
+    conn.execute("UPDATE issues SET cycle_id = NULL WHERE cycle_id = ?1", params![cycle_id])
+        .map_err(|e| e.to_string())
 }
 
 pub fn delete_cycle(conn: &Connection, id: &str) -> Result<(), String> {

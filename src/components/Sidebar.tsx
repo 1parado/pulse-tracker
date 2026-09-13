@@ -1,4 +1,4 @@
-import { CalendarRange, ListTodo, Moon, Plus, Settings, Sun } from "lucide-react";
+import { CalendarRange, ListTodo, Moon, Pencil, Plus, Settings, Sun, Trash2 } from "lucide-react";
 import type { Cycle, Project, View } from "../lib/types";
 
 export function Sidebar({
@@ -10,6 +10,10 @@ export function Sidebar({
   onNavigate,
   onNewProject,
   onNewCycle,
+  onEditProject,
+  onDeleteProject,
+  onEditCycle,
+  onDeleteCycle,
   onOpenSettings,
   onToggleTheme,
 }: {
@@ -21,6 +25,10 @@ export function Sidebar({
   onNavigate: (v: View) => void;
   onNewProject: () => void;
   onNewCycle: () => void;
+  onEditProject: (p: Project) => void;
+  onDeleteProject: (p: Project) => void;
+  onEditCycle: (c: Cycle) => void;
+  onDeleteCycle: (c: Cycle) => void;
   onOpenSettings: () => void;
   onToggleTheme: () => void;
 }) {
@@ -37,13 +45,16 @@ export function Sidebar({
       </div>
 
       <nav className="side-nav">
-        <button
+        <div
           className={"nav-item" + (view.kind === "all" ? " active" : "")}
+          role="button"
+          tabIndex={0}
           onClick={() => onNavigate({ kind: "all" })}
+          onKeyDown={(e) => e.key === "Enter" && onNavigate({ kind: "all" })}
         >
           <ListTodo size={15} />
           <span className="nav-label">全部问题</span>
-        </button>
+        </div>
 
         <div className="nav-section">
           <div className="nav-section-head">
@@ -53,17 +64,28 @@ export function Sidebar({
             </button>
           </div>
           {projects.map((p) => (
-            <button
+            <div
               key={p.id}
               className={"nav-item" + (view.kind === "project" && view.id === p.id ? " active" : "")}
+              role="button"
+              tabIndex={0}
               onClick={() => onNavigate({ kind: "project", id: p.id })}
+              onKeyDown={(e) => e.key === "Enter" && onNavigate({ kind: "project", id: p.id })}
             >
               <span className="dot" style={{ background: p.color }} />
               <span className="nav-label">{p.name}</span>
               {issueCountByProject[p.id] > 0 && (
                 <span className="nav-count">{issueCountByProject[p.id]}</span>
               )}
-            </button>
+              <span className="nav-actions">
+                <button className="icon-btn sm" title="编辑项目" onClick={(e) => { e.stopPropagation(); onEditProject(p); }}>
+                  <Pencil size={12} />
+                </button>
+                <button className="icon-btn sm danger" title="删除项目" onClick={(e) => { e.stopPropagation(); onDeleteProject(p); }}>
+                  <Trash2 size={12} />
+                </button>
+              </span>
+            </div>
           ))}
           {projects.length === 0 && <div className="nav-empty">暂无项目</div>}
         </div>
@@ -76,24 +98,35 @@ export function Sidebar({
             </button>
           </div>
           {cycles.map((c) => (
-            <button
+            <div
               key={c.id}
               className={"nav-item" + (view.kind === "cycle" && view.id === c.id ? " active" : "")}
+              role="button"
+              tabIndex={0}
               onClick={() => onNavigate({ kind: "cycle", id: c.id })}
+              onKeyDown={(e) => e.key === "Enter" && onNavigate({ kind: "cycle", id: c.id })}
             >
               <CalendarRange size={15} color="var(--text-3)" />
               <span className="nav-label">{c.name}</span>
-            </button>
+              <span className="nav-actions">
+                <button className="icon-btn sm" title="编辑周期" onClick={(e) => { e.stopPropagation(); onEditCycle(c); }}>
+                  <Pencil size={12} />
+                </button>
+                <button className="icon-btn sm danger" title="删除周期" onClick={(e) => { e.stopPropagation(); onDeleteCycle(c); }}>
+                  <Trash2 size={12} />
+                </button>
+              </span>
+            </div>
           ))}
           {cycles.length === 0 && <div className="nav-empty">暂无周期</div>}
         </div>
       </nav>
 
       <div className="side-footer">
-        <button className="nav-item" onClick={onOpenSettings}>
+        <div className="nav-item" role="button" tabIndex={0} onClick={onOpenSettings} onKeyDown={(e) => e.key === "Enter" && onOpenSettings()}>
           <Settings size={15} />
           <span className="nav-label">设置</span>
-        </button>
+        </div>
       </div>
     </aside>
   );

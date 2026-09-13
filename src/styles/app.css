@@ -152,6 +152,29 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* hover 时隐藏计数、显示编辑/删除操作 */
+.nav-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.nav-item:hover .nav-count {
+  display: none;
+}
+.nav-item:hover .nav-actions {
+  display: inline-flex;
+}
+.nav-actions .icon-btn {
+  color: var(--text-3);
+}
+.nav-actions .icon-btn:hover {
+  color: var(--text);
+}
+.nav-actions .icon-btn.danger:hover {
+  color: var(--danger, #e5566a);
+}
+
 .nav-section {
   margin-top: 14px;
 }

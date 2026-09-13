@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { Cycle, Issue, Project, Status } from "../lib/types";
 import { PRIORITY_META, PRIORITY_ORDER, STATUS_META, STATUS_ORDER } from "../lib/types";
 import { api } from "../lib/api";
+import { manualCheckAndPrompt } from "../lib/updater";
 import { Modal } from "./common";
 
 export function NewIssueModal({
@@ -362,6 +364,8 @@ export function SettingsModal({
 }) {
   const [dn, setDn] = useState(displayName);
   const [gt, setGt] = useState(ghToken);
+  const [version, setVersion] = useState("");
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -369,6 +373,19 @@ export function SettingsModal({
       setGt(ghToken);
     }
   }, [open, displayName, ghToken]);
+
+  useEffect(() => {
+    if (open) getVersion().then(setVersion).catch(() => {});
+  }, [open]);
+
+  const runCheck = async () => {
+    setChecking(true);
+    try {
+      await manualCheckAndPrompt();
+    } finally {
+      setChecking(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -390,9 +407,12 @@ export function SettingsModal({
           />
         </label>
         <p className="form-note">Token 仅保存在本机数据库中，用于调用 GitHub API。</p>
+        <p className="form-note">当前版本 {version ? `v${version}` : "…"}</p>
       </div>
       <div className="modal-foot">
-        <span />
+        <button className="btn" disabled={checking} onClick={runCheck}>
+          {checking ? "检查中…" : "检查更新"}
+        </button>
         <button className="btn primary" onClick={() => onSave(dn.trim(), gt.trim())}>
           保存
         </button>

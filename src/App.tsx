@@ -13,6 +13,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { api } from "./lib/api";
 import { toast, ToastHost } from "./lib/toast";
+import { silentStartupCheck } from "./lib/updater";
 import type { Cycle, Issue, Project, Status, View } from "./lib/types";
 import { STATUS_ORDER } from "./lib/types";
 import { Sidebar } from "./components/Sidebar";
@@ -78,6 +79,11 @@ export default function App() {
     return () => {
       un.then((f) => f()).catch(() => {});
     };
+  }, []);
+
+  // 启动 3 秒后静默检查更新（失败不打扰）
+  useEffect(() => {
+    silentStartupCheck(3000);
   }, []);
 
   // 全局搜索（250ms 防抖；后端查标题/描述/编号/评论）

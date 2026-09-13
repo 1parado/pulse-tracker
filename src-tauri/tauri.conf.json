@@ -28,6 +28,15 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc3QzlFRDUxMDhDRThCOUUKUldTZWk4NElVZTNKZHpVQk9JZmwrdS9xVFdhTW1VTk5NQWRBWlJ1cGZlQUtIQ0ZlZEF5TVRyY0EK",
+      "endpoints": [
+        "https://github.com/1parado/pulse-tracker/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

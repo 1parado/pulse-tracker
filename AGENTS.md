@@ -17,7 +17,7 @@
 |---|---|---|
 | 桌面框架 | Tauri 2 | Rust 核心 + 系统 WebView2，安装包 ~2.5MB |
 | 后端 | Rust (stable, edition 2021) | rusqlite (bundled SQLite)、ureq、serde、serde_json、uuid |
-| 前端 | Vite 5 + React 18 + TypeScript | @tauri-apps/api、@tauri-apps/plugin-opener、lucide-react、@fontsource-variable/inter |
+| 前端 | Vite 5 + React 18 + TypeScript | @tauri-apps/api + 官方插件（opener / process / updater / window-state / global-shortcut）、marked + DOMPurify、lucide-react、Inter Variable |
 | 样式 | 原创设计令牌系统 | `src/styles/tokens.css`（语义变量 --bg/--surface/--accent…，明暗双主题），组件样式在 `app.css`，便签窗口在 `sticky.css` |
 | 包管理 | pnpm@9 | 版本只声明在 package.json 的 `packageManager` 字段，**禁止**在 workflow 里再写 version（会冲突） |
 | 构建/发布 | GitHub Actions `.github/workflows/release.yml` | push `v*` tag → windows-latest → tauri-action → draft release → 手动转正 |
@@ -65,7 +65,9 @@ pulse-tracker/
 │   ├── lib/
 │   │   ├── api.ts                  # 全部 invoke 封装（前端唯一出口）
 │   │   ├── types.ts                # 领域类型 + 状态/优先级元数据
-│   │   └── toast.tsx               # 轻量 Toast 通知
+│   │   ├── toast.tsx               # 轻量 Toast 通知（支持操作按钮）
+│   │   ├── markdown.tsx            # Markdown 渲染（marked + DOMPurify 消毒）
+│   │   └── updater.ts              # 自动更新（启动静默检查 / 手动检查 / 下载重启）
 │   ├── components/                 # Sidebar / IssueList / IssueDetail / CommandPalette / StickyNote / modals / common
 │   └── styles/                     # tokens.css / app.css / sticky.css
 └── src-tauri/
@@ -86,19 +88,26 @@ pulse-tracker/
 2. `git tag vX.Y.Z && git push origin vX.Y.Z` 触发 CI（约 10–25 分钟）
 3. 后台 `gh run watch <run_id> --exit-status` 盯结果
 4. 成功 → `gh release edit vX.Y.Z --draft=false` 转正并核验产物（`Pulse_X.Y.Z_x64-setup.exe` + `Pulse-portable.exe`）
-5. 失败 → `gh run view <run_id> --log-failed` 取日志修复后重打 tag（release 尚不存在时可删远端 tag 重指）
+5. 失败 → `gh run view <run_id> --log-failed` 取日志修复：代码错误修完重打 tag（release 尚不存在时可删远端 tag 重指）；secret/环境类改动直接 `gh run rerun <run_id> --failed` 原地重跑（secrets 在重跑时重新读取，无需重打 tag）
+
+> workflow 的 `releaseBody` 会写入 latest.json 的 notes 字段（更新提示文案来源），保持其内容有意义。
 
 ## 6. 已知设计取舍（改动前先确认是否要推翻）
 
 - `seq` 全局自增：跨项目连续编号（PLS-1、ABC-2…），刻意简化
 - 便签窗口与主窗口数据不实时互推：便签重开即最新；主窗口操作后需重新选择问题刷新
 - 附件上限 20MB（base64 经内存，防 OOM）
-- 尚无：系统托盘、自动更新、富文本/Markdown、标签、子问题、分配人、批量操作、撤销
+- 尚无：标签、子问题、分配人、批量操作、数据导出/导入、自动化测试
+- 自动更新自 v0.4.0 起生效（更新包经 minisign 签名校验）；更早版本需手动安装一次 v0.4.0+
 
-## 7. 路线图优先级（下一版候选）
+## 7. 路线图
 
-1. 拖拽改状态已在 v0.2 落地；下一步：列表内联改优先级
-2. 项目/周期编辑（改名、改色、改日期）
-3. GitHub 双向：从 Pulse 建 issue、评论回流
-4. 托盘 + 全局快捷键（快速建待办）
-5. 数据导出/导入（JSON / Markdown）
+已落地：拖拽改状态、桌面便签（v0.2）；托盘、项目/周期编辑、全局搜索、Markdown、GitHub 双向同步、全局快捷键、归档+撤销回收站（v0.3）；自动更新（v0.4）。
+
+下一版候选（按建议顺序）：
+
+1. 按项目独立编号（推翻 seq 全局自增取舍，需迁移存量数据）
+2. 数据导出/导入（JSON / Markdown）
+3. 自动化测试补齐（Rust 单元测试 + 前端关键路径）
+4. 列表内联改优先级
+5. GitHub 关联增强（PR 关联、更多字段回流）

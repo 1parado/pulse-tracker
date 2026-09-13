@@ -38,13 +38,10 @@ fn main() {
                 });
             }
 
-            // 恢复上次钉在桌面的便签
-            let state = app.state::<AppState>();
-            let ids = {
-                let conn = state
-                    .conn
-                    .lock()
-                    .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            // 恢复上次钉在桌面的便签（受限作用域内取锁，读完立刻释放）
+            let ids: Vec<String> = {
+                let state = app.state::<AppState>();
+                let conn = state.conn.lock().map_err(|e| e.to_string())?;
                 notes::list(&conn)?
             };
             for id in ids {

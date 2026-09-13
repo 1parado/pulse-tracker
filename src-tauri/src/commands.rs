@@ -252,22 +252,10 @@ pub fn add_comment(state: State<'_, AppState>, input: NewComment) -> Result<Comm
         author,
         body: input.body,
         created_at: String::new(),
+        gh_id: None,
     };
     db::insert_comment(&conn, &c)?;
-    conn.query_row(
-        "SELECT * FROM comments WHERE id = ?1",
-        [&c.id],
-        |row| {
-            Ok(Comment {
-                id: row.get("id")?,
-                issue_id: row.get("issue_id")?,
-                author: row.get("author")?,
-                body: row.get("body")?,
-                created_at: row.get("created_at")?,
-            })
-        },
-    )
-    .map_err(|e| e.to_string())
+    db::get_comment(&conn, &c.id)
 }
 
 #[tauri::command]
@@ -359,20 +347,173 @@ pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> Re
 
 // ---------- github ----------
 
+/// 本地状态 → 远端 issue 状态
+fn local_to_gh_state(status: &str) -> &'static str {
+    if status == "done" || status == "canceled" {
+        "closed"
+    } else {
+        "open"
+    }
+}
+
+/// 双向同步：拉取元数据/评论入库，推送本地状态与未同步评论到远端（本地为准）。
+/// repo/number 缺省时使用已链接的远端信息。
 #[tauri::command]
 pub async fn github_sync(
     state: State<'_, AppState>,
     issueId: String,
-    repo: String,
-    number: i64,
+    repo: Option<String>,
+    number: Option<i64>,
 ) -> Result<Issue, String> {
-    let token = {
+    // 1. 锁内收集输入（不跨 await 持锁）
+    let (repo_v, number_v, local_status, unsynced, token) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        db::get_setting(&conn, "github_token")?
+        let it = db::get_issue(&conn, &issueId)?;
+        let repo_v = match repo {
+            Some(r) => r,
+            None => it
+                .gh_repo
+                .clone()
+                .ok_or_else(|| "该问题尚未链接 GitHub issue".to_string())?,
+        };
+        let number_v = match number {
+            Some(n) => n,
+            None => it.gh_number.ok_or_else(|| "缺少 GitHub issue 编号".to_string())?,
+        };
+        let token = db::get_setting(&conn, "github_token")?;
+        let unsynced = db::unsynced_comments(&conn, &issueId)?;
+        (repo_v, number_v, it.status, unsynced, token)
     };
-    let repo_ref = repo.clone();
+
+    // 2. 拉取远端元数据
+    let info = {
+        let repo_ref = repo_v.clone();
+        let token_ref = token.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            github::fetch_issue(&repo_ref, number_v, token_ref)
+        })
+        .await
+        .map_err(|e| e.to_string())??
+    };
+
+    // 3. 状态对齐（本地为准；失败不打断，下次同步重试）
+    let want_state = local_to_gh_state(&local_status);
+    let state_pushed = if info.state != want_state {
+        let repo_ref = repo_v.clone();
+        let token_ref = token.clone();
+        let res = tauri::async_runtime::spawn_blocking(move || {
+            github::push_state(&repo_ref, number_v, want_state, token_ref.as_deref())
+        })
+        .await;
+        res.map(|r| r.is_ok()).unwrap_or(false)
+    } else {
+        false
+    };
+    let state_now = if state_pushed {
+        want_state.to_string()
+    } else {
+        info.state.clone()
+    };
+
+    // 4. 推送本地未同步评论（逐条成功即回填 gh_id，避免重试重复发送；单条失败即停）
+    let mut pushed: Vec<(String, i64)> = Vec::new();
+    let mut push_err: Option<String> = None;
+    for c in &unsynced {
+        let repo_ref = repo_v.clone();
+        let token_ref = token.clone();
+        let body = c.body.clone();
+        let res = tauri::async_runtime::spawn_blocking(move || {
+            github::push_comment(&repo_ref, number_v, &body, token_ref.as_deref())
+        })
+        .await
+        .map_err(|e| e.to_string());
+        match res {
+            Ok(Ok(gid)) => pushed.push((c.id.clone(), gid)),
+            Ok(Err(e)) => {
+                push_err = Some(format!("推送评论失败：{}", e));
+                break;
+            }
+            Err(e) => {
+                push_err = Some(format!("推送评论失败：{}", e));
+                break;
+            }
+        }
+    }
+
+    // 5. 拉取远端评论（失败不阻断已完成的推送）
+    let remote_comments = {
+        let repo_ref = repo_v.clone();
+        let token_ref = token.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            github::list_comments(&repo_ref, number_v, token_ref.as_deref())
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    };
+
+    // 6. 锁内写回
+    let issue = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let mut it = db::get_issue(&conn, &issueId)?;
+        it.gh_repo = Some(repo_v);
+        it.gh_number = Some(number_v);
+        it.gh_state = Some(state_now);
+        it.gh_title = if info.title.is_empty() { None } else { Some(info.title) };
+        it.gh_url = if info.url.is_empty() { None } else { Some(info.url) };
+        db::update_issue_full(&conn, &it)?;
+
+        for (cid, gid) in &pushed {
+            db::set_comment_gh_id(&conn, cid, *gid)?;
+        }
+        if let Ok(comments) = &remote_comments {
+            for gc in comments {
+                if !db::get_comments_by_gh_id(&conn, &issueId, gc.id)? {
+                    let c = Comment {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        issue_id: issueId.clone(),
+                        author: gc
+                            .user
+                            .as_ref()
+                            .map(|u| format!("gh:{}", u.login))
+                            .unwrap_or_else(|| "gh:unknown".to_string()),
+                        body: gc.body.clone(),
+                        created_at: gc.created_at.clone(),
+                        gh_id: Some(gc.id),
+                    };
+                    db::insert_comment(&conn, &c)?;
+                }
+            }
+        }
+        db::get_issue(&conn, &issueId)?
+    };
+    match push_err {
+        Some(e) => Err(e),
+        None => Ok(issue),
+    }
+}
+
+/// 把本地问题推送到 GitHub 新建 issue 并建立链接。
+#[tauri::command]
+pub async fn github_push_issue(
+    state: State<'_, AppState>,
+    issueId: String,
+    repo: String,
+) -> Result<Issue, String> {
+    let (title, body, token) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let it = db::get_issue(&conn, &issueId)?;
+        if it.gh_repo.is_some() {
+            return Err("该问题已链接 GitHub issue".to_string());
+        }
+        let token = db::get_setting(&conn, "github_token")?;
+        (it.title, it.description, token)
+    };
+    if token.as_deref().map(|t| t.trim().is_empty()).unwrap_or(true) {
+        return Err("推送需要 GitHub Token，请先在设置中填写".to_string());
+    }
+
     let info = tauri::async_runtime::spawn_blocking(move || {
-        github::fetch_issue(&repo_ref, number, token)
+        github::create_issue(&repo, &title, &body, token.as_deref())
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -381,10 +522,10 @@ pub async fn github_sync(
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         let mut it = db::get_issue(&conn, &issueId)?;
         it.gh_repo = Some(repo);
-        it.gh_number = Some(number);
-        it.gh_state = Some(info.state.clone());
-        it.gh_title = if info.title.is_empty() { None } else { Some(info.title.clone()) };
-        it.gh_url = if info.url.is_empty() { None } else { Some(info.url.clone()) };
+        it.gh_number = Some(info.number);
+        it.gh_state = Some(info.state);
+        it.gh_title = if info.title.is_empty() { None } else { Some(info.title) };
+        it.gh_url = if info.url.is_empty() { None } else { Some(info.url) };
         db::update_issue_full(&conn, &it)?;
         db::get_issue(&conn, &issueId)
     }

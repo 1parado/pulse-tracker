@@ -133,6 +133,7 @@ fn main() {
             commands::get_setting,
             commands::set_setting,
             commands::github_sync,
+            commands::github_push_issue,
             commands::list_sticky_notes,
             commands::open_sticky_note,
             commands::close_sticky_note,

@@ -44,6 +44,7 @@ export interface Comment {
   author: string;
   body: string;
   createdAt: string;
+  ghId?: number | null;
 }
 
 export interface Attachment {

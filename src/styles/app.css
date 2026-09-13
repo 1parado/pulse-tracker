@@ -309,6 +309,12 @@ button {
   padding: 1px 4px;
 }
 
+.comment-gh {
+  vertical-align: -1px;
+  margin-right: 3px;
+  color: var(--text-3);
+}
+
 /* ---------- 通用控件 ---------- */
 
 .icon-btn {

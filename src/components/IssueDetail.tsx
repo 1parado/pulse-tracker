@@ -128,14 +128,25 @@ export function IssueDetail({
   };
 
   const linkGithub = async () => {
-    const m = ghInput.trim().match(/^([\w.-]+\/[\w.-]+?)#?(\d+)$/);
-    if (!m) return;
+    const v = ghInput.trim();
+    if (!v || ghBusy) return;
     setGhBusy(true);
     try {
-      const updated = await api.githubSync(issue.id, m[1], Number(m[2]));
-      onUpdated(updated);
+      const linked = v.match(/^([\w.-]+\/[\w.-]+?)#(\d+)$/);
+      if (linked) {
+        const updated = await api.githubSync(issue.id, linked[1], Number(linked[2]));
+        onUpdated(updated);
+        toast("已链接并拉取远端内容", "ok");
+      } else if (/^[\w.-]+\/[\w.-]+$/.test(v)) {
+        const updated = await api.pushToGithub(issue.id, v);
+        onUpdated(updated);
+        toast("已推送到 GitHub 并建立链接", "ok");
+      } else {
+        toast("格式应为 owner/repo 或 owner/repo#123", "error");
+        return;
+      }
     } catch (e) {
-      toast(`GitHub 同步失败：${e}`, "error");
+      toast(`GitHub 操作失败：${e}`, "error");
     } finally {
       setGhBusy(false);
     }
@@ -272,7 +283,7 @@ export function IssueDetail({
                     <ExternalLink size={13} />打开
                   </button>
                 )}
-                <button className="btn ghost sm" disabled={ghBusy} onClick={linkGithub}>
+                <button className="btn ghost sm" disabled={ghBusy} onClick={linkGithub} title="拉取元数据与评论，推送本地状态与评论">
                   <RefreshCw size={13} className={ghBusy ? "spin" : ""} />同步
                 </button>
                 <button className="btn ghost sm" onClick={unlinkGithub}>
@@ -284,7 +295,7 @@ export function IssueDetail({
             <div className="gh-link-row">
               <input
                 className="input"
-                placeholder="owner/repo#123"
+                placeholder="owner/repo#123 链接已有 · owner/repo 推送新建"
                 value={ghInput}
                 onChange={(e) => setGhInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -292,7 +303,7 @@ export function IssueDetail({
                 }}
               />
               <button className="btn primary sm" disabled={ghBusy || !ghInput.trim()} onClick={linkGithub}>
-                链接
+                {ghInput.includes("#") ? "链接" : "推送"}
               </button>
             </div>
           )}
@@ -346,7 +357,10 @@ export function IssueDetail({
               <div className="comment-avatar">{c.author.slice(0, 1)}</div>
               <div className="comment-main">
                 <div className="comment-meta">
-                  <span className="comment-author">{c.author}</span>
+                  <span className="comment-author">
+                    {c.author.startsWith("gh:") && <Github size={11} className="comment-gh" />}
+                    {c.author.startsWith("gh:") ? c.author.slice(3) : c.author}
+                  </span>
                   <span className="comment-time">{fmtDate(c.createdAt)}</span>
                   <button className="icon-btn sm" onClick={() => {
                     api.deleteComment(c.id).then(() =>

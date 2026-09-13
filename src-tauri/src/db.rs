@@ -6,7 +6,25 @@ use crate::models::*;
 pub fn init(path: &Path) -> Result<Connection, String> {
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
+    migrate(&conn)?;
     Ok(conn)
+}
+
+/// 增量迁移：v0.3.0 评论表增加 gh_id（GitHub 评论 id，用于双向同步去重）
+fn migrate(conn: &Connection) -> Result<(), String> {
+    let has_gh_id: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('comments') WHERE name = 'gh_id'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .map_err(|e| e.to_string())?;
+    if !has_gh_id {
+        conn.execute_batch("ALTER TABLE comments ADD COLUMN gh_id INTEGER;")
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 const SCHEMA: &str = r#"
@@ -53,7 +71,8 @@ CREATE TABLE IF NOT EXISTS comments (
   issue_id TEXT NOT NULL,
   author TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  gh_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS attachments (
   id TEXT PRIMARY KEY,
@@ -119,6 +138,7 @@ fn comment_from_row(row: &rusqlite::Row) -> rusqlite::Result<Comment> {
         author: row.get("author")?,
         body: row.get("body")?,
         created_at: row.get("created_at")?,
+        gh_id: row.get("gh_id").ok().flatten(),
     })
 }
 
@@ -363,11 +383,52 @@ pub fn list_comments(conn: &Connection, issue_id: &str) -> Result<Vec<Comment>, 
 
 pub fn insert_comment(conn: &Connection, c: &Comment) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO comments (id, issue_id, author, body) VALUES (?1, ?2, ?3, ?4)",
-        params![c.id, c.issue_id, c.author, c.body],
+        "INSERT INTO comments (id, issue_id, author, body, gh_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![c.id, c.issue_id, c.author, c.body, c.gh_id],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// 拉取/推送评论双向同步的辅助方法
+
+pub fn get_comments_by_gh_id(conn: &Connection, issue_id: &str, gh_id: i64) -> Result<bool, String> {
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM comments WHERE issue_id = ?1 AND gh_id = ?2",
+            params![issue_id, gh_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(n > 0)
+}
+
+pub fn unsynced_comments(conn: &Connection, issue_id: &str) -> Result<Vec<Comment>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT * FROM comments WHERE issue_id = ?1 AND gh_id IS NULL ORDER BY created_at ASC, rowid ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![issue_id], comment_from_row)
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn set_comment_gh_id(conn: &Connection, id: &str, gh_id: i64) -> Result<(), String> {
+    conn.execute(
+        "UPDATE comments SET gh_id = ?1 WHERE id = ?2",
+        params![gh_id, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_comment(conn: &Connection, id: &str) -> Result<Comment, String> {
+    conn.query_row("SELECT * FROM comments WHERE id = ?1", params![id], comment_from_row)
+        .optional()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "comment not found".to_string())
 }
 
 pub fn delete_comment(conn: &Connection, id: &str) -> Result<(), String> {

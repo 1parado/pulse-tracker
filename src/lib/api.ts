@@ -82,9 +82,11 @@ export const api = {
   getSetting: (key: string) => invoke<string | null>("get_setting", { key }),
   setSetting: (key: string, value: string) => invoke<void>("set_setting", { key, value }),
 
-  // github
-  githubSync: (issueId: string, repo: string, number: number) =>
-    invoke<Issue>("github_sync", { issueId, repo, number }),
+  // github（双向同步：拉元数据/评论 + 推状态/评论；repo/number 缺省用已链接的）
+  githubSync: (issueId: string, repo?: string, number?: number) =>
+    invoke<Issue>("github_sync", { issueId, repo: repo ?? null, number: number ?? null }),
+  pushToGithub: (issueId: string, repo: string) =>
+    invoke<Issue>("github_push_issue", { issueId, repo }),
 
   // sticky notes（桌面便签）
   listStickies: () => invoke<string[]>("list_sticky_notes"),

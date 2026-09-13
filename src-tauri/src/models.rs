@@ -51,6 +51,8 @@ pub struct Comment {
     pub author: String,
     pub body: String,
     pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gh_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,7 +150,21 @@ pub struct NewAttachment {
 
 #[derive(Debug, Serialize)]
 pub struct GhIssueInfo {
+    pub number: i64,
     pub state: String,
     pub title: String,
     pub url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GhComment {
+    pub id: i64,
+    pub body: String,
+    pub created_at: String,
+    pub user: Option<GhUser>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GhUser {
+    pub login: String,
 }

@@ -4,6 +4,7 @@ import "@fontsource-variable/inter";
 import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/sticky.css";
+import "./styles/markdown.css";
 import App from "./App";
 import { StickyNote } from "./components/StickyNote";
 import { getCurrentWindow } from "@tauri-apps/api/window";

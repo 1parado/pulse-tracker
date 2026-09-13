@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, FileText, Github, MessageSquare, MousePointerClick, Paperclip, Plus, RefreshCw, StickyNote as StickyNoteIcon, Trash2, Unlink, X } from "lucide-react";
+import { ExternalLink, Eye, FileText, Github, MessageSquare, MousePointerClick, Paperclip, Pencil, Plus, RefreshCw, StickyNote as StickyNoteIcon, Trash2, Unlink, X } from "lucide-react";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { api, type UpdateIssueInput } from "../lib/api";
 import { toast } from "../lib/toast";
+import { Markdown } from "../lib/markdown";
 import type { Attachment, Comment, Cycle, Issue, Project, Status } from "../lib/types";
 import { PRIORITY_META, PRIORITY_ORDER, STATUS_META, STATUS_ORDER } from "../lib/types";
 import { fmtDate, fmtSize } from "./common";
@@ -38,6 +39,7 @@ export function IssueDetail({
   const [titleDraft, setTitleDraft] = useState("");
   const [descDraft, setDescDraft] = useState("");
   const [commentDraft, setCommentDraft] = useState("");
+  const [descMode, setDescMode] = useState<"edit" | "preview">("edit");
   const [ghInput, setGhInput] = useState("");
   const [ghBusy, setGhBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -51,6 +53,7 @@ export function IssueDetail({
     }
     setTitleDraft(issue.title);
     setDescDraft(issue.description);
+    setDescMode("edit");
     setGhInput(issue.ghRepo && issue.ghNumber ? `${issue.ghRepo}#${issue.ghNumber}` : "");
     api.listComments(issue.id).then(setComments).catch(() => setComments([]));
     api.listAttachments(issue.id).then(setAttachments).catch(() => setAttachments([]));
@@ -295,15 +298,43 @@ export function IssueDetail({
           )}
         </div>
 
-        <textarea
-          ref={descRef}
-          className="detail-desc"
-          value={descDraft}
-          onChange={(e) => setDescDraft(e.target.value)}
-          onBlur={saveDesc}
-          placeholder="添加描述…"
-          rows={2}
-        />
+        <div className="desc-block">
+          <div className="desc-toolbar">
+            <button
+              className={"md-toggle" + (descMode === "edit" ? " on" : "")}
+              title="编辑描述"
+              onClick={() => setDescMode("edit")}
+            >
+              <Pencil size={12} /> 编辑
+            </button>
+            <button
+              className={"md-toggle" + (descMode === "preview" ? " on" : "")}
+              title="预览 Markdown"
+              onClick={() => {
+                if (descDraft !== issue.description) saveDesc();
+                setDescMode("preview");
+              }}
+            >
+              <Eye size={12} /> 预览
+            </button>
+          </div>
+          {descMode === "edit" ? (
+            <textarea
+              ref={descRef}
+              className="detail-desc"
+              value={descDraft}
+              onChange={(e) => setDescDraft(e.target.value)}
+              onBlur={saveDesc}
+              placeholder="添加描述…（支持 Markdown）"
+              rows={2}
+            />
+          ) : (
+            <Markdown
+              text={descDraft}
+              className={descDraft.trim() ? "" : "md-empty"}
+            />
+          )}
+        </div>
 
         <div className="detail-section">
           <div className="section-head">
@@ -325,7 +356,7 @@ export function IssueDetail({
                     <X size={12} />
                   </button>
                 </div>
-                <div className="comment-body">{c.body}</div>
+                <Markdown text={c.body} className="comment-md" />
               </div>
             </div>
           ))}
@@ -333,7 +364,7 @@ export function IssueDetail({
             <textarea
               className="textarea"
               value={commentDraft}
-              placeholder="写下评论，Ctrl+Enter 发送"
+              placeholder="写下评论，支持 Markdown（Ctrl+Enter 发送）"
               onChange={(e) => setCommentDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submitComment();

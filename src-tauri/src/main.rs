@@ -12,6 +12,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 pub struct AppState {
     pub conn: Mutex<rusqlite::Connection>,
@@ -31,6 +32,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(dir.join("attachments")).ok();
@@ -61,6 +63,30 @@ fn main() {
             for id in ids {
                 let _ = notes::open(app.handle(), &id);
             }
+
+            // 全局快捷键：Ctrl+Shift+Space 切换主窗显隐，Ctrl+Shift+Alt+N 快速新建问题
+            let gs = app.global_shortcut();
+            gs.on_shortcut("ctrl+shift+space", |app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    if let Some(win) = app.get_webview_window("main") {
+                        let visible =
+                            win.is_visible().unwrap_or(false) && !win.is_minimized().unwrap_or(false);
+                        if visible {
+                            let _ = win.hide();
+                        } else {
+                            let _ = win.show();
+                            let _ = win.unminimize();
+                            let _ = win.set_focus();
+                        }
+                    }
+                }
+            })?;
+            gs.on_shortcut("ctrl+shift+alt+n", |app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    show_main(app);
+                    let _ = app.emit("tray://new-issue", ());
+                }
+            })?;
 
             // 系统托盘：左键切换主窗显隐，右键菜单
             let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;

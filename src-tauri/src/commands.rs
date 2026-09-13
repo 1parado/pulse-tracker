@@ -1,8 +1,9 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::db;
 use crate::github;
 use crate::models::*;
+use crate::notes;
 use crate::AppState;
 
 #[tauri::command]
@@ -81,7 +82,7 @@ pub fn update_issue(state: State<'_, AppState>, input: UpdateIssue) -> Result<Is
 }
 
 #[tauri::command]
-pub fn delete_issue(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub fn delete_issue(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
     let paths = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         db::delete_issue_rows(&conn, &id)?
@@ -89,7 +90,25 @@ pub fn delete_issue(state: State<'_, AppState>, id: String) -> Result<(), String
     for p in paths {
         std::fs::remove_file(&p).ok();
     }
+    // 问题删除后同步收起其桌面便签
+    let pinned = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let pinned = notes::list(&conn)?.iter().any(|x| x == &id);
+        if pinned {
+            notes::remove(&conn, &id)?;
+        }
+        pinned
+    };
+    if pinned {
+        notes::close_window(&app, &id);
+    }
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_issue(state: State<'_, AppState>, id: String) -> Result<Issue, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    db::get_issue(&conn, &id)
 }
 
 // ---------- projects ----------
@@ -246,6 +265,9 @@ pub fn add_attachment(state: State<'_, AppState>, input: NewAttachment) -> Resul
     let data = base64::engine::general_purpose::STANDARD
         .decode(input.data_base64.as_bytes())
         .map_err(|e| e.to_string())?;
+    if data.len() > 20 * 1024 * 1024 {
+        return Err("附件不能超过 20MB".to_string());
+    }
     let safe_name: String = input
         .name
         .replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
@@ -315,13 +337,47 @@ pub async fn github_sync(
     {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         let mut it = db::get_issue(&conn, &issueId)?;
-        it.gh_repo = Some(repo.clone());
+        it.gh_repo = Some(repo);
         it.gh_number = Some(number);
         it.gh_state = Some(info.state.clone());
         it.gh_title = if info.title.is_empty() { None } else { Some(info.title.clone()) };
         it.gh_url = if info.url.is_empty() { None } else { Some(info.url.clone()) };
         db::update_issue_full(&conn, &it)?;
+        db::get_issue(&conn, &issueId)
     }
+}
+
+// ---------- sticky notes（桌面便签） ----------
+
+#[tauri::command]
+pub fn list_sticky_notes(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    db::get_issue(&conn, &issueId)
+    notes::list(&conn)
+}
+
+#[tauri::command]
+pub fn open_sticky_note(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    issueId: String,
+) -> Result<(), String> {
+    // 校验问题存在；建窗口时不持锁（窗口创建可能阻塞）
+    {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        db::get_issue(&conn, &issueId)?;
+    }
+    notes::open(&app, &issueId)?;
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    notes::add(&conn, &issueId)
+}
+
+#[tauri::command]
+pub fn close_sticky_note(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    issueId: String,
+) -> Result<(), String> {
+    notes::close_window(&app, &issueId);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    notes::remove(&conn, &issueId)
 }

@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { ChevronDown, Github, Inbox, Plus } from "lucide-react";
-import type { Issue } from "../lib/types";
+import type { Issue, Status } from "../lib/types";
 import { STATUS_META, STATUS_ORDER } from "../lib/types";
 import { PriorityIcon, StatusIcon, fmtDate } from "./common";
+
+function nextStatus(s: Status): Status {
+  const i = STATUS_ORDER.indexOf(s);
+  return STATUS_ORDER[(i + 1) % STATUS_ORDER.length];
+}
 
 export function IssueList({
   title,
@@ -12,6 +17,7 @@ export function IssueList({
   onSelect,
   onNewIssue,
   progress,
+  onStatusChange,
 }: {
   title: string;
   subtitle?: string;
@@ -20,13 +26,19 @@ export function IssueList({
   onSelect: (id: string) => void;
   onNewIssue: () => void;
   progress?: number | null;
+  onStatusChange: (id: string, status: Status) => void;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overStatus, setOverStatus] = useState<Status | null>(null);
 
-  const groups = STATUS_ORDER.map((s) => ({
+  const dragging = dragId != null;
+  const allGroups = STATUS_ORDER.map((s) => ({
     status: s,
     items: issues.filter((i) => i.status === s),
-  })).filter((g) => g.items.length > 0);
+  }));
+  // 平时隐藏空分组；拖拽时全部展开以便投放
+  const groups = dragging ? allGroups : allGroups.filter((g) => g.items.length > 0);
 
   return (
     <section className="list-pane">
@@ -60,7 +72,28 @@ export function IssueList({
         )}
 
         {groups.map((g) => (
-          <div key={g.status} className="issue-group">
+          <div
+            key={g.status}
+            className={"issue-group" + (dragging && overStatus === g.status ? " drop-target" : "")}
+            onDragOver={(e) => {
+              if (!dragging) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              setOverStatus(g.status);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                setOverStatus((s) => (s === g.status ? null : s));
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const id = dragId ?? e.dataTransfer.getData("text/plain");
+              if (id && id !== "" ) onStatusChange(id, g.status);
+              setDragId(null);
+              setOverStatus(null);
+            }}
+          >
             <button
               className="group-header"
               onClick={() => setCollapsed((c) => ({ ...c, [g.status]: !c[g.status] }))}
@@ -70,21 +103,48 @@ export function IssueList({
               <span className="group-count">{g.items.length}</span>
               <ChevronDown size={13} className={"chev" + (collapsed[g.status] ? " closed" : "")} />
             </button>
-            {!collapsed[g.status] &&
+            {g.items.length === 0 ? (
+              <div className="group-empty">拖到「{STATUS_META[g.status].label}」</div>
+            ) : (
+              !collapsed[g.status] &&
               g.items.map((i) => (
                 <div
                   key={i.id}
-                  className={"issue-row" + (i.id === selectedId ? " selected" : "")}
+                  draggable
+                  onDragStart={(e) => {
+                    setDragId(i.id);
+                    e.dataTransfer.setData("text/plain", i.id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setOverStatus(null);
+                  }}
+                  className={
+                    "issue-row" +
+                    (i.id === selectedId ? " selected" : "") +
+                    (dragId === i.id ? " dragging" : "")
+                  }
                   onClick={() => onSelect(i.id)}
                 >
                   <span className="issue-key">{i.displayKey}</span>
-                  <StatusIcon status={i.status} size={14} />
+                  <button
+                    className="status-cycle"
+                    title={`改为「${STATUS_META[nextStatus(i.status)].label}」`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStatusChange(i.id, nextStatus(i.status));
+                    }}
+                  >
+                    <StatusIcon status={i.status} size={14} />
+                  </button>
                   <PriorityIcon priority={i.priority} size={13} />
                   <span className="issue-title">{i.title}</span>
                   {i.ghRepo && <Github size={12} className="row-gh" />}
                   <span className="issue-date">{fmtDate(i.updatedAt)}</span>
                 </div>
-              ))}
+              ))
+            )}
           </div>
         ))}
       </div>

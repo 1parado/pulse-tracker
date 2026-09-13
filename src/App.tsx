@@ -6,10 +6,12 @@ import {
   Moon,
   Plus,
   Settings as SettingsIcon,
+  StickyNote as StickyNoteIcon,
   Sun,
 } from "lucide-react";
 import { api } from "./lib/api";
-import type { Cycle, Issue, Project, View } from "./lib/types";
+import { toast, ToastHost } from "./lib/toast";
+import type { Cycle, Issue, Project, Status, View } from "./lib/types";
 import { STATUS_ORDER } from "./lib/types";
 import { Sidebar } from "./components/Sidebar";
 import { IssueList } from "./components/IssueList";
@@ -31,6 +33,7 @@ export default function App() {
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [view, setView] = useState<View>({ kind: "all" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [stickyIds, setStickyIds] = useState<string[]>([]);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newIssueOpen, setNewIssueOpen] = useState(false);
@@ -52,6 +55,7 @@ export default function App() {
     refresh();
     api.getSetting("display_name").then((v) => setDisplayName(v ?? "")).catch(() => {});
     api.getSetting("github_token").then((v) => setGhToken(v ?? "")).catch(() => {});
+    api.listStickies().then(setStickyIds).catch(() => {});
   }, [refresh]);
 
   const visible = useMemo(() => {
@@ -130,6 +134,25 @@ export default function App() {
     setSelectedId(i.id);
   };
 
+  const onStatusChange = (id: string, status: Status) => {
+    api
+      .updateIssue({ id, status })
+      .then(onIssueUpdated)
+      .catch((e) => toast(`状态更新失败：${e}`, "error"));
+  };
+
+  const toggleSticky = (issue: Issue) => {
+    const pinned = stickyIds.includes(issue.id);
+    const call = pinned ? api.closeSticky(issue.id) : api.openSticky(issue.id);
+    call
+      .then(() => api.listStickies())
+      .then((ids) => {
+        setStickyIds(ids);
+        toast(pinned ? "已取消桌面便签" : "已钉到桌面，随时可见", "ok");
+      })
+      .catch((e) => toast(pinned ? `取消便签失败：${e}` : `钉便签失败：${e}`, "error"));
+  };
+
   const issueCountByProject = useMemo(() => {
     const map: Record<string, number> = {};
     for (const i of issues) {
@@ -202,6 +225,7 @@ export default function App() {
         onSelect={setSelectedId}
         onNewIssue={() => setNewIssueOpen(true)}
         progress={viewInfo.progress}
+        onStatusChange={onStatusChange}
       />
 
       <IssueDetail
@@ -210,6 +234,8 @@ export default function App() {
         cycles={cycles}
         onUpdated={onIssueUpdated}
         onDeleted={onIssueDeleted}
+        stickyPinned={selected != null && stickyIds.includes(selected.id)}
+        onToggleSticky={toggleSticky}
       />
 
       <CommandPalette
@@ -228,6 +254,17 @@ export default function App() {
             icon: theme === "dark" ? <Sun size={14} /> : <Moon size={14} />,
             run: () => setTheme((t) => (t === "dark" ? "light" : "dark")),
           },
+          ...(selected
+            ? [
+                {
+                  label: stickyIds.includes(selected.id)
+                    ? "取消当前问题的桌面便签"
+                    : "把当前问题钉为桌面便签",
+                  icon: <StickyNoteIcon size={14} />,
+                  run: () => toggleSticky(selected),
+                },
+              ]
+            : []),
         ]}
         onSelectIssue={(id) => setSelectedId(id)}
         onNavigate={navigateAndClose}
@@ -268,6 +305,8 @@ export default function App() {
         ghToken={ghToken}
         onSave={saveSettings}
       />
+
+      <ToastHost />
     </div>
   );
 }

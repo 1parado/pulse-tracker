@@ -1,0 +1,142 @@
+/* 便签窗口（sticky-*）专属样式；与主窗口共享 tokens.css 的变量 */
+
+.is-sticky {
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.sticky-note {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* 顶部拖动条：底色随状态色 */
+.sticky-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  color: #fff;
+  flex: none;
+  cursor: grab;
+}
+.sticky-bar:active {
+  cursor: grabbing;
+}
+
+.sticky-grip {
+  opacity: 0.75;
+}
+
+.sticky-key {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.sticky-close {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sticky-close:hover {
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
+}
+
+.sticky-body {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sticky-title-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.sticky-check {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 1px;
+  flex: none;
+  display: flex;
+  transition: color 0.12s;
+}
+.sticky-check:hover {
+  color: var(--accent);
+}
+.sticky-check.done {
+  color: var(--ok);
+}
+
+.sticky-title {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--text);
+  padding: 0;
+  user-select: text;
+}
+
+.sticky-desc {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  padding-left: 24px;
+}
+
+.sticky-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 12px 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  flex: none;
+  border-top: 1px solid var(--border);
+}
+
+.sticky-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 12px;
+  padding: 0 16px;
+  text-align: center;
+}

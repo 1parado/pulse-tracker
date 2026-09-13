@@ -26,6 +26,7 @@ export interface UpdateIssueInput {
 export const api = {
   // issues
   listIssues: () => invoke<Issue[]>("list_issues"),
+  getIssue: (id: string) => invoke<Issue>("get_issue", { id }),
   createIssue: (input: NewIssueInput) => invoke<Issue>("create_issue", { input }),
   updateIssue: (input: UpdateIssueInput) => invoke<Issue>("update_issue", { input }),
   deleteIssue: (id: string) => invoke<void>("delete_issue", { id }),
@@ -69,4 +70,9 @@ export const api = {
   // github
   githubSync: (issueId: string, repo: string, number: number) =>
     invoke<Issue>("github_sync", { issueId, repo, number }),
+
+  // sticky notes（桌面便签）
+  listStickies: () => invoke<string[]>("list_sticky_notes"),
+  openSticky: (issueId: string) => invoke<void>("open_sticky_note", { issueId }),
+  closeSticky: (issueId: string) => invoke<void>("close_sticky_note", { issueId }),
 };

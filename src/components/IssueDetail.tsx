@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, FileText, Github, MessageSquare, MousePointerClick, Paperclip, Plus, RefreshCw, Trash2, Unlink, X } from "lucide-react";
+import { ExternalLink, FileText, Github, MessageSquare, MousePointerClick, Paperclip, Plus, RefreshCw, StickyNote as StickyNoteIcon, Trash2, Unlink, X } from "lucide-react";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { api, type UpdateIssueInput } from "../lib/api";
+import { toast } from "../lib/toast";
 import type { Attachment, Comment, Cycle, Issue, Project, Status } from "../lib/types";
 import { PRIORITY_META, PRIORITY_ORDER, STATUS_META, STATUS_ORDER } from "../lib/types";
 import { fmtDate, fmtSize } from "./common";
@@ -21,12 +22,16 @@ export function IssueDetail({
   cycles,
   onUpdated,
   onDeleted,
+  stickyPinned,
+  onToggleSticky,
 }: {
   issue: Issue | null;
   projects: Project[];
   cycles: Cycle[];
   onUpdated: (i: Issue) => void;
   onDeleted: (id: string) => void;
+  stickyPinned: boolean;
+  onToggleSticky: (i: Issue) => void;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -36,6 +41,7 @@ export function IssueDetail({
   const [ghInput, setGhInput] = useState("");
   const [ghBusy, setGhBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const descRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!issue) {
@@ -50,6 +56,15 @@ export function IssueDetail({
     api.listAttachments(issue.id).then(setAttachments).catch(() => setAttachments([]));
   }, [issue?.id]);
 
+  // 描述输入框自适应高度
+  useEffect(() => {
+    const el = descRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, [descDraft]);
+
   if (!issue) {
     return (
       <section className="detail-pane">
@@ -63,8 +78,12 @@ export function IssueDetail({
   }
 
   const patch = async (input: Omit<UpdateIssueInput, "id">) => {
-    const updated = await api.updateIssue({ id: issue.id, ...input });
-    onUpdated(updated);
+    try {
+      const updated = await api.updateIssue({ id: issue.id, ...input });
+      onUpdated(updated);
+    } catch (e) {
+      toast(`保存失败：${e}`, "error");
+    }
   };
 
   const saveTitle = () => {
@@ -77,17 +96,25 @@ export function IssueDetail({
   const submitComment = async () => {
     const body = commentDraft.trim();
     if (!body) return;
-    setCommentDraft("");
-    const c = await api.addComment(issue.id, body);
-    setComments((list) => [...list, c]);
+    try {
+      const c = await api.addComment(issue.id, body);
+      setCommentDraft("");
+      setComments((list) => [...list, c]);
+    } catch (e) {
+      toast(`评论发送失败：${e}`, "error");
+    }
   };
 
   const uploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     for (const f of Array.from(files)) {
-      const data = await toBase64(f);
-      const att = await api.addAttachment(issue.id, f.name, data);
-      setAttachments((list) => [...list, att]);
+      try {
+        const data = await toBase64(f);
+        const att = await api.addAttachment(issue.id, f.name, data);
+        setAttachments((list) => [...list, att]);
+      } catch (e) {
+        toast(`上传 ${f.name} 失败：${e}`, "error");
+      }
     }
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -104,6 +131,8 @@ export function IssueDetail({
     try {
       const updated = await api.githubSync(issue.id, m[1], Number(m[2]));
       onUpdated(updated);
+    } catch (e) {
+      toast(`GitHub 同步失败：${e}`, "error");
     } finally {
       setGhBusy(false);
     }
@@ -129,6 +158,13 @@ export function IssueDetail({
       <div className="detail-head">
         <span className="issue-key big">{issue.displayKey}</span>
         <div className="detail-head-actions">
+          <button
+            className={"icon-btn" + (stickyPinned ? " pinned" : "")}
+            onClick={() => onToggleSticky(issue)}
+            title={stickyPinned ? "取消桌面便签" : "钉为桌面便签"}
+          >
+            <StickyNoteIcon size={15} />
+          </button>
           <button className="icon-btn" onClick={delIssue} title="删除问题">
             <Trash2 size={15} />
           </button>
@@ -260,12 +296,13 @@ export function IssueDetail({
         </div>
 
         <textarea
+          ref={descRef}
           className="detail-desc"
           value={descDraft}
           onChange={(e) => setDescDraft(e.target.value)}
           onBlur={saveDesc}
           placeholder="添加描述…"
-          rows={4}
+          rows={2}
         />
 
         <div className="detail-section">

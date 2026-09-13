@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pulse 设计预览</title>
+<link rel="stylesheet" href="../src/styles/tokens.css" />
+<link rel="stylesheet" href="../src/styles/app.css" />
+<style>
+  body { overflow: auto; }
+  .preview-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--surface); z-index: 9;
+  }
+  .preview-bar span { font-size: 12px; color: var(--text-3); }
+</style>
+</head>
+<body>
+<div class="preview-bar">
+  <span><b style="color:var(--text)">Pulse</b> · 设计预览（静态样张，非应用本体）— 与 src/styles完全同源</span>
+  <button class="btn ghost sm" onclick="const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'">切换明暗</button>
+</div>
+
+<div class="app" style="height: calc(100vh - 41px)">
+  <!-- 侧栏 -->
+  <aside class="sidebar">
+    <div class="side-header">
+      <div class="brand"><span class="brand-mark"></span><span class="brand-name">Pulse</span></div>
+      <button class="icon-btn">◐</button>
+    </div>
+    <nav class="side-nav">
+      <button class="nav-item active"><span class="nav-label">全部问题</span></button>
+      <div class="nav-section">
+        <div class="nav-section-head"><span>项目</span><button class="icon-btn sm">+</button></div>
+        <button class="nav-item"><span class="dot" style="background:#6E7BF2"></span><span class="nav-label">Pulse 本体</span><span class="nav-count">3</span></button>
+        <button class="nav-item"><span class="dot" style="background:#58C48F"></span><span class="nav-label">官网改版</span><span class="nav-count">1</span></button>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-head"><span>周期</span><button class="icon-btn sm">+</button></div>
+        <button class="nav-item"><span class="nav-label">Sprint 1</span></button>
+      </div>
+    </nav>
+    <div class="side-footer">
+      <button class="nav-item"><span class="nav-label">设置</span></button>
+    </div>
+  </aside>
+
+  <!-- 列表 -->
+  <section class="list-pane">
+    <header class="list-toolbar">
+      <div class="toolbar-titles">
+        <h1 class="toolbar-title">全部问题</h1>
+        <span class="toolbar-sub">4 个问题</span>
+      </div>
+      <div class="toolbar-actions">
+        <div class="progress"><div class="progress-bar" style="width:50%"></div></div>
+        <button class="btn primary sm">+ 新建</button>
+      </div>
+    </header>
+    <div class="issue-scroll">
+      <div class="issue-group">
+        <button class="group-header"><span style="color:#F5B83D">◐</span><span class="group-name">进行中</span><span class="group-count">1</span></button>
+        <div class="issue-row selected">
+          <span class="issue-key">PLS-4</span><span style="color:#F5B83D">◐</span>
+          <span class="issue-title">同步引擎：离线写入队列与冲突消解</span>
+          <span class="issue-date">09-13 20:4</span>
+        </div>
+      </div>
+      <div class="issue-group">
+        <button class="group-header"><span style="color:#9AA0B4">○</span><span class="group-name">待办</span><span class="group-count">1</span></button>
+        <div class="issue-row">
+          <span class="issue-key">PLS-3</span><span style="color:#9AA0B4">○</span>
+          <span class="issue-title">命令面板支持模糊拼音匹配</span>
+          <span class="issue-date">09-13 18:2</span>
+        </div>
+      </div>
+      <div class="issue-group">
+        <button class="group-header"><span style="color:#58C48F">✓</span><span class="group-name">已完成</span><span class="group-count">2</span></button>
+        <div class="issue-row">
+          <span class="issue-key">PLS-2</span><span style="color:#58C48F">✓</span>
+          <span class="issue-title">设计令牌体系：语义层 + 主题运行时注入</span>
+          <span class="issue-date">09-13 15:0</span>
+        </div>
+        <div class="issue-row">
+          <span class="issue-key">PLS-1</span><span style="color:#58C48F">✓</span>
+          <span class="issue-title">三栏布局骨架与键盘导航（j/k）</span>
+          <span class="issue-date">09-13 11:3</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 详情 -->
+  <section class="detail-pane">
+    <div class="detail-head">
+      <span class="issue-key big">PLS-4</span>
+      <div class="detail-head-actions"><button class="icon-btn">🗑</button></div>
+    </div>
+    <div class="detail-scroll">
+      <input class="detail-title" value="同步引擎：离线写入队列与冲突消解" readonly />
+      <div class="prop-grid">
+        <label class="prop"><span class="prop-label">状态</span><select class="select"><option>进行中</option></select></label>
+        <label class="prop"><span class="prop-label">优先级</span><select class="select"><option>高</option></select></label>
+        <label class="prop"><span class="prop-label">项目</span><select class="select"><option>Pulse 本体</option></select></label>
+        <label class="prop"><span class="prop-label">周期</span><select class="select"><option>Sprint 1</option></select></label>
+      </div>
+      <div class="gh-card">
+        <div class="gh-head"><span>⌗</span><span>GitHub</span><span class="gh-state" style="color:var(--ok)">● open</span></div>
+        <div class="gh-linked">
+          <span class="gh-ref">1parado/pulse-tracker#42</span>
+          <span class="gh-title">feat: offline sync queue</span>
+        </div>
+        <div class="gh-actions">
+          <button class="btn ghost sm">打开</button>
+          <button class="btn ghost sm">同步</button>
+          <button class="btn ghost sm">解除</button>
+        </div>
+      </div>
+      <textarea class="detail-desc" rows="3" readonly>离线时写入本地 SQLite 队列，恢复联网后按序重放；冲突以 updated_at 较新者胜。</textarea>
+      <div class="detail-section">
+        <div class="section-head"><span>✉</span><span>评论 · 2</span></div>
+        <div class="comment">
+          <div class="comment-avatar">P</div>
+          <div class="comment-main">
+            <div class="comment-meta"><span class="comment-author">Paradox</span><span class="comment-time">09-13 19:1</span></div>
+            <div class="comment-body">先做 last-write-wins，向量时钟放 v0.2。</div>
+          </div>
+        </div>
+        <div class="comment">
+          <div class="comment-avatar">我</div>
+          <div class="comment-main">
+            <div class="comment-meta"><span class="comment-author">我</span><span class="comment-time">09-13 20:2</span></div>
+            <div class="comment-body">收到，队列表加 retry_count 字段。</div>
+          </div>
+        </div>
+        <div class="composer">
+          <textarea class="textarea" rows="2" placeholder="写下评论，Ctrl+Enter 发送"></textarea>
+          <button class="btn primary sm">发送</button>
+        </div>
+      </div>
+      <div class="detail-section">
+        <div class="section-head"><span>📎</span><span>附件 · 1</span></div>
+        <div class="attach-list">
+          <div class="attach-chip"><span>📄</span><span class="attach-name">sync-queue-design.pdf</span><span class="attach-size">412 KB</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

@@ -1,0 +1,65 @@
+/* Pulse design tokens —— 基于 Linear 气质原创迭代：更柔和的层板、更克制的强调色 */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 层板 */
+  --bg: #0e0f13;
+  --surface: #14151b;
+  --surface-2: #191b22;
+  --hover: #1d1f28;
+  --active: #232631;
+  --overlay: rgba(6, 7, 10, 0.6);
+
+  /* 线 */
+  --border: #22242d;
+  --border-2: #2e313c;
+
+  /* 文字 */
+  --text: #e9eaee;
+  --text-2: #9da1ad;
+  --text-3: #676b78;
+
+  /* 强调 */
+  --accent: #6e7bf2;
+  --accent-hover: #7f8bf5;
+  --accent-soft: rgba(110, 123, 242, 0.14);
+  --accent-text: #aab3ff;
+
+  /* 语义 */
+  --danger: #e5566a;
+  --ok: #58c48f;
+
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #fafafc;
+  --surface: #ffffff;
+  --surface-2: #f4f5f8;
+  --hover: #eff0f5;
+  --active: #e7e9f0;
+  --overlay: rgba(24, 26, 38, 0.35);
+
+  --border: #e6e8ee;
+  --border-2: #d6d9e2;
+
+  --text: #1b1d25;
+  --text-2: #5c6070;
+  --text-3: #9aa0b0;
+
+  --accent: #5b68e8;
+  --accent-hover: #4c59e0;
+  --accent-soft: rgba(91, 104, 232, 0.1);
+  --accent-text: #4753d8;
+
+  --danger: #d6455c;
+  --ok: #2fa574;
+
+  --shadow: 0 16px 48px rgba(24, 26, 44, 0.16), 0 2px 8px rgba(24, 26, 44, 0.08);
+}

@@ -139,7 +139,7 @@ pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, Strin
     conn.query_row(
         "SELECT value FROM settings WHERE key = ?1",
         params![key],
-        |r| r.get::<_, Option<String>>(0),
+        |r| r.get::<_, String>(0),
     )
     .optional()
     .map_err(|e| e.to_string())

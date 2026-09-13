@@ -305,8 +305,9 @@ pub async fn github_sync(
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         db::get_setting(&conn, "github_token")?
     };
+    let repo_ref = repo.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
-        github::fetch_issue(&repo, number, token)
+        github::fetch_issue(&repo_ref, number, token)
     })
     .await
     .map_err(|e| e.to_string())??;

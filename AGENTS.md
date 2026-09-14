@@ -48,6 +48,7 @@
 - Rust：错误统一 `Result<T, String>` 映射；业务路径避免 `unwrap()/expect()`；锁的持有范围尽量小（不持锁做 IO/建窗口）
 - 新增一个 Tauri 命令的固定四步：`models.rs`（新结构体，如需）→ `db.rs`（数据访问）→ `commands.rs`（`#[tauri::command]`）→ `main.rs` 注册 `generate_handler` + `lib/api.ts` 封装
 - 新窗口 / 新插件记得同步 `src-tauri/capabilities/default.json`（windows 数组与 permissions）
+- **创建窗口的 Tauri 命令必须声明为 `async`**：同步命令跑在主线程，`WebviewWindowBuilder::build()` 在主线程调用会死锁整个应用（v0.4.0 便签卡死教训）；`setup` 里建窗口不受此限
 - 发版 bump **三处**版本号：`src-tauri/tauri.conf.json`、`package.json`、`src-tauri/Cargo.toml`
 - UI 文案统一简体中文；注释只解释「为什么」，不复述「是什么」
 - 样式一律引用 tokens.css 的语义变量，禁止在组件里写裸色值（状态色等元数据除外，见 lib/types.ts）

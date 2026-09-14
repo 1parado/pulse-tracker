@@ -644,7 +644,7 @@ pub fn list_sticky_notes(state: State<'_, AppState>) -> Result<Vec<String>, Stri
 }
 
 #[tauri::command]
-pub fn open_sticky_note(
+pub async fn open_sticky_note(
     app: AppHandle,
     state: State<'_, AppState>,
     issueId: String,
@@ -654,6 +654,7 @@ pub fn open_sticky_note(
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         db::get_issue(&conn, &issueId)?;
     }
+    // 必须是 async 命令：同步命令跑在主线程，WebviewWindowBuilder 在主线程建窗口会死锁整个应用
     notes::open(&app, &issueId)?;
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     notes::add(&conn, &issueId)

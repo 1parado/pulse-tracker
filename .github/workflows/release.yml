@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false # 仓库无 pnpm-lock.yaml，v5 默认自动缓存会直接报错
 
       - uses: dtolnay/rust-toolchain@stable
 
